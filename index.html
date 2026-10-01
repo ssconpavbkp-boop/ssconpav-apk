@@ -273,6 +273,11 @@ body.home .top b{color:#fff}
 .relbar.prev{background:#FFF4D6;border-color:#F3D98A;color:#5A3A00}
 #t-seq.previsao .slotp[data-slot$="|depois"]{display:none}
 #t-seq.previsao .slotp.mais{display:none}
+/* aviso de atualização automática */
+.atu-aviso{position:fixed;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top,0px));z-index:9999;display:none;gap:10px;align-items:center;
+  padding:12px 14px;border-radius:14px;background:rgba(20,20,20,.94);color:#fff;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.45);border:1px solid rgba(252,106,3,.6)}
+.atu-aviso.show{display:flex}
+.atu-aviso i{font-size:20px;color:var(--cat)}
 </style>
 </head>
 <body>
@@ -572,7 +577,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261001-003';
+const APP_VERSION = '20261001-004';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -3088,6 +3093,81 @@ seqRender = async function(){
   });
   const add = $('s-add-txt'); if(add){ const n = document.querySelectorAll('#s-lista .fcard-furo').length; add.textContent = `Marcar buraco ${n+1} (foto do Antes + medidas)`; }
 };
+
+/* ======================= ATUALIZAÇÃO AUTOMÁTICA DA TELA =======================
+   A casca (APK) já sabe baixar um index.html novo e trocar por ele sem instalar
+   nada. O que faltava era ninguém precisar apertar botão: aqui o app procura
+   sozinho ao abrir, de tempos em tempos e ao voltar do bolso; quando acha, troca
+   assim que o apontador estiver numa tela "parada" (início/login), para nunca
+   derrubar um relatório no meio. Pelo navegador faz o mesmo, recarregando. */
+let ATU_AUTO = false, ATU_PENDENTE = null, ATU_ULTIMA_BUSCA = 0, ATU_APLICANDO = false;
+const ATU_INTERVALO = 15*60*1000;
+
+function telaParada(){ return TELA==='inicio' || TELA==='login' || TELA==='par'; }
+
+async function verificarTelaAuto(forcar){
+  if(!navigator.onLine) return;
+  if(!forcar && Date.now()-ATU_ULTIMA_BUSCA < 5*60*1000) return;
+  ATU_ULTIMA_BUSCA = Date.now();
+  if(noAplicativo()){ ATU_AUTO = true; try{ AndroidTeste.procurarAtualizacao(); }catch(e){ ATU_AUTO=false; } return; }
+  try{
+    const r = await fetch(CANAL_APP+'versao.json?t='+Date.now(), {cache:'no-store'});
+    if(!r.ok) return;
+    const j = await r.json();
+    if(j.appVersion && j.appVersion !== APP_VERSION){
+      ATUALIZACAO = {estado:'pronta', versao:j.appVersion}; ATU_PENDENTE = j.appVersion;
+      pintarFaixaAtualizacao(); aplicarSeParado();
+    }
+  }catch(e){}
+}
+
+/* a casca responde aqui; quando a busca foi automática, nada de alerta na tela
+   de ajustes — só aplica (ou guarda para aplicar) */
+const _avisarAtualizacaoBase = avisarAtualizacao;
+avisarAtualizacao = function(estado, valor){
+  if(!ATU_AUTO){ _avisarAtualizacaoBase(estado, valor); return; }
+  ATU_AUTO = false;
+  ATUALIZACAO = {estado, valor, versao:valor};
+  if(estado === 'pronta'){ ATU_PENDENTE = valor; pintarFaixaAtualizacao(); aplicarSeParado(); }
+  pintarVersao();
+};
+
+/* se a publicação ainda estiver entregando o arquivo velho (cache de alguns
+   minutos), não fica recarregando em círculo: tenta a mesma versão uma vez a
+   cada 15 minutos */
+function tentouHaPouco(v){
+  try{ const t = JSON.parse(localStorage.getItem('sscapp_atu_tentativa')||'null');
+       return !!(t && t.v===v && Date.now()-t.em < ATU_INTERVALO); }catch(e){ return false; }
+}
+function marcarTentativa(v){ try{ localStorage.setItem('sscapp_atu_tentativa', JSON.stringify({v, em:Date.now()})); }catch(e){} }
+function aplicarSeParado(){
+  if(!ATU_PENDENTE || ATU_APLICANDO) return;
+  if(!noAplicativo() && tentouHaPouco(ATU_PENDENTE)) return;
+  if(!telaParada()){ mostrarAvisoAtu(); return; }
+  ATU_APLICANDO = true; marcarTentativa(ATU_PENDENTE);
+  mostrarAvisoAtu(true);
+  setTimeout(async ()=>{
+    if(noAplicativo()){ AndroidTeste.aplicarAtualizacao(); return; }
+    try{ await fetch(location.pathname, {cache:'reload'}); }catch(e){}
+    location.reload();
+  }, 2500);
+}
+function mostrarAvisoAtu(agora){
+  let b = $('atu-aviso');
+  if(!b){ b = document.createElement('div'); b.id='atu-aviso'; b.className='atu-aviso'; document.body.appendChild(b); }
+  b.innerHTML = agora
+    ? `<i class="ti ti-refresh"></i><span>Atualizando para a versão <b>${esc(ATU_PENDENTE)}</b>…</span>`
+    : `<i class="ti ti-download"></i><span>Versão <b>${esc(ATU_PENDENTE)}</b> pronta — entra sozinha quando você voltar ao início.</span>`;
+  b.classList.add('show');
+}
+/* ao voltar para o início a versão pendente entra */
+const _irBaseAtu = ir;
+ir = function(t){ _irBaseAtu(t); if(ATU_PENDENTE && telaParada()) setTimeout(aplicarSeParado, 600); };
+
+setTimeout(()=>verificarTelaAuto(true), 5000);
+setInterval(()=>{ if(!document.hidden) verificarTelaAuto(false); }, ATU_INTERVALO);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) verificarTelaAuto(false); });
+window.addEventListener('online', ()=>verificarTelaAuto(false));
 
 </script>
 </body>
