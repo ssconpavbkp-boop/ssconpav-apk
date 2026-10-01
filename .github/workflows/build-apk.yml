@@ -59,7 +59,7 @@ jobs:
       - name: Calcular o código de versão do APK
         id: codigo
         run: |
-          CODIGO=$(date -u +%y%m%d%H%M | sed 's/^0*//')
+          CODIGO=$(date -u +%y%j%H%M | sed 's/^0*//')   # ano+dia-do-ano+hora: cabe no limite do Android (2147483647)
           echo "codigo=$CODIGO" >> "$GITHUB_OUTPUT"
           cd android
           sed -i "s/versionCode [0-9]*/versionCode $CODIGO/" app/build.gradle
