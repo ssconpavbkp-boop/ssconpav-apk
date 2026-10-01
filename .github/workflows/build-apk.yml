@@ -1,0 +1,120 @@
+name: Build do APK (SSCONPAV Campo)
+
+# Builda o .apk sempre que o index.html (a tela) ou o projeto Android mudam.
+# Quando existe um keystore de release nos Secrets do repositório, o APK sai
+# assinado para valer; sem ele, sai assinado com a chave de debug — instala
+# e funciona igual, só não é o ideal para distribuir fora da equipe.
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'index.html'
+      - 'ssconpav-mobile/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicacao-ssconpav
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ssconpav-mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+
+      - uses: actions/setup-java@v4
+        with: { distribution: 'temurin', java-version: '21' }
+
+      - name: Instalar dependências
+        run: npm ci || npm install --no-audit --no-fund
+
+      - name: Copiar a tela mais recente para dentro do projeto
+        run: cp ../index.html www/index.html
+
+      - name: Ler a versão de dentro do próprio index.html
+        id: ver
+        run: |
+          TELA=$(grep -o "APP_VERSION = '[^']*'" www/index.html | head -1 | sed "s/.*'\(.*\)'/\1/")
+          echo "tela=$TELA" >> "$GITHUB_OUTPUT"
+          echo "Versão da tela: $TELA"
+
+      - name: Sincronizar com o Capacitor
+        run: npx cap sync android
+
+      - name: Garantir que o gradlew pode ser executado
+        run: chmod +x android/gradlew
+
+      - name: Calcular o código de versão do APK
+        id: codigo
+        run: |
+          CODIGO=$(date -u +%y%m%d%H%M | sed 's/^0*//')
+          echo "codigo=$CODIGO" >> "$GITHUB_OUTPUT"
+          cd android
+          sed -i "s/versionCode [0-9]*/versionCode $CODIGO/" app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"${{ steps.ver.outputs.tela }}\"/" app/build.gradle
+
+      - name: Preparar o keystore de release (se configurado nos Secrets)
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            echo "tem=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "tem=0" >> "$GITHUB_OUTPUT"
+            echo "::notice::Sem ANDROID_KEYSTORE_BASE64 nos Secrets -- o APK sai assinado com a chave de debug."
+          fi
+
+      - name: Build (assinado de release)
+        if: steps.keystore.outputs.tem == '1'
+        working-directory: ssconpav-mobile/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+            -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
+          cp app/build/outputs/apk/release/app-release.apk ../../SSCONPAV-Campo.apk
+
+      - name: Build (assinado de debug -- sem keystore configurado)
+        if: steps.keystore.outputs.tem == '0'
+        working-directory: ssconpav-mobile/android
+        run: |
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../../SSCONPAV-Campo.apk
+
+      - name: Atualizar o versao.json com a versão do app
+        working-directory: .
+        run: |
+          python3 - << 'PY'
+          import json
+          v = json.load(open('versao.json'))
+          v['apkVersionCode'] = int("${{ steps.codigo.outputs.codigo }}")
+          v['apkVersionName'] = "${{ steps.ver.outputs.tela }}"
+          v['apkUrl'] = "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
+          json.dump(v, open('versao.json','w'), indent=2, ensure_ascii=False)
+          PY
+
+      - name: Publicar o .apk e o versao.json
+        run: |
+          cd ..
+          git config user.name  'Publicador SSCONPAV'
+          git config user.email 'actions@github.com'
+          git add SSCONPAV-Campo.apk versao.json
+          git diff --cached --quiet && echo "Nada novo para publicar." || \
+            (git commit -m "APK ${{ steps.ver.outputs.tela }} (código ${{ steps.codigo.outputs.codigo }})" && git push)
