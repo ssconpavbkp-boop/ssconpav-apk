@@ -36,7 +36,9 @@ jobs:
         with: { distribution: 'temurin', java-version: '21' }
 
       - name: Instalar dependências
-        run: npm ci || npm install --no-audit --no-fund
+        run: |
+          npm ci || npm install --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund typescript
 
       - name: Copiar a tela mais recente para dentro do projeto
         run: cp ../index.html www/index.html
