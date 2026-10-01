@@ -1,4 +1,4 @@
 {
-  "appVersion": "20261001-002",
-  "notas": "Nuvem SSCONPAV configurada e ajustes de layout."
+  "appVersion": "20261001-003",
+  "notas": "Novo relatório pede região e massa carregada; ao adicionar buraco pergunta se mantém a rua; relatório de Previsão que vira o relatório do dia na data prevista."
 }

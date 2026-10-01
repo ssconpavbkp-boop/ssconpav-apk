@@ -264,6 +264,15 @@ body.home .top b{color:#fff}
 .hwid .ic i{font-size:22px;color:#fff}
 .hwid b{display:block;font-size:14px}
 .hwid span{display:block;font-size:12px;color:#D8D8D8;margin-top:2px}
+/* região / massa / previsão */
+.relinfo{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip-info{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:12px;font-size:12px;background:var(--bg3);color:var(--text2);border:1px solid var(--border)}
+.chip-info i{font-size:14px}
+.chip-info.faltando{background:var(--red-bg);color:var(--red);border-color:#F3B9B9}
+.chip-info.prev{background:#FFF4D6;color:#7A4E00;border-color:#F3D98A}
+.relbar.prev{background:#FFF4D6;border-color:#F3D98A;color:#5A3A00}
+#t-seq.previsao .slotp[data-slot$="|depois"]{display:none}
+#t-seq.previsao .slotp.mais{display:none}
 </style>
 </head>
 <body>
@@ -476,6 +485,30 @@ body.home .top b{color:#fff}
   <div id="nv-ajustes" onclick="ir('ajustes')"><i class="ti ti-settings"></i>Ajustes</div>
 </div>
 
+<!-- ====== NOVO RELATÓRIO / PREVISÃO: região e massa ====== -->
+<div class="ov" id="ov-novo">
+  <div class="sheet" style="max-height:92vh;overflow:auto">
+    <div style="font-size:17px;font-weight:800;margin-bottom:4px" id="nv-tit">Novo relatório fotográfico</div>
+    <div style="font-size:13.5px;color:var(--text2);margin-bottom:14px" id="nv-sub">
+      Informe onde a equipe vai trabalhar e quanta massa saiu carregada.</div>
+    <div class="f2">
+      <div class="fg"><label id="nv-data-rot">Data *</label><input type="date" id="nv-data"></div>
+      <div class="fg"><label>Equipe</label><select id="nv-eq"></select></div>
+    </div>
+    <div class="fg"><label>Região em que a equipe está *</label>
+      <input type="text" id="nv-regiao" list="dl-regioes" placeholder="Ex.: Zona Norte · Bairro Centro" autocapitalize="words"></div>
+    <div class="f2">
+      <div class="fg"><label id="nv-massa-rot">Massa carregada (t)</label>
+        <input type="number" id="nv-massa" step="0.1" min="0" inputmode="decimal" placeholder="0,0"></div>
+      <div class="fg"><label>Rua inicial</label><input type="text" id="nv-rua" list="dl-ruas" placeholder="opcional"></div>
+    </div>
+    <button class="btn p" id="nv-ok"><i class="ti ti-file-plus"></i>Abrir relatório</button>
+    <button class="btn" style="margin-top:9px" onclick="document.getElementById('ov-novo').style.display='none'">Cancelar</button>
+    <div class="al ae" id="nv-err"><i class="ti ti-alert-circle"></i><span></span></div>
+  </div>
+</div>
+<datalist id="dl-regioes"></datalist>
+
 <datalist id="dl-ruas"></datalist>
 <input type="file" id="seq-file" accept="image/*" capture="environment" style="display:none" onchange="seqRecebeuFoto(this)">
 
@@ -539,7 +572,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261001-002';
+const APP_VERSION = '20261001-003';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -2812,6 +2845,250 @@ async function baixarRelatorio(uid){
        (${esc(err.message||err)}). Feche e abra novamente.</span></div>`);
   }
 })();
+
+/* ====================================================================== */
+/*  CAMPO SSCONPAV: região + massa no relatório, pergunta da rua,          */
+/*  relatório de PREVISÃO (vira o relatório do dia na data prevista)       */
+/* ====================================================================== */
+const DENS_MASSA = 2.4;   /* t/m³ — massa asfáltica compactada, para estimar o pedido */
+function amanha(){ const d=new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
+function massaBR(t){ return (Math.round((t||0)*10)/10).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}); }
+function ehPrevisao(r){ return !!(r && r.previsao); }
+
+/* ---- lista de regiões já usadas (relatórios + cadastro das equipes) ---- */
+async function preencherRegioes(){
+  try{
+    const [rels, eqs] = await Promise.all([dbGetAll('relatorios'), dbGetAll('equipes')]);
+    const set = new Set();
+    rels.forEach(r=>{ if(r.regiao) set.add(r.regiao); });
+    eqs.forEach(e=>{ if(e.regiao) set.add(e.regiao); });
+    const dl = $('dl-regioes'); if(dl) dl.innerHTML = [...set].sort().map(r=>`<option value="${esc(r)}">`).join('');
+  }catch(e){}
+}
+
+/* ---- folha de abertura: usada pelo relatório normal e pela previsão ---- */
+function abrirFolhaNovo(opc){
+  return new Promise(res=>{
+    const prev = !!opc.previsao;
+    $('nv-tit').textContent = prev ? 'Nova previsão' : 'Novo relatório fotográfico';
+    $('nv-sub').innerHTML = prev
+      ? 'O apontador vai na frente: marca os buracos, tira a foto do <b>Antes</b> e mede. Na data prevista, isto vira o relatório do dia — só faltará a foto do <b>Concluído</b>.'
+      : 'Informe onde a equipe vai trabalhar e quanta massa saiu carregada.';
+    $('nv-data-rot').textContent = prev ? 'Data prevista do serviço *' : 'Data *';
+    $('nv-massa-rot').textContent = prev ? 'Massa prevista (t) — opcional' : 'Massa carregada (t)';
+    $('nv-data').value = opc.data || (prev ? amanha() : hoje());
+    preencherEquipes('nv-eq'); if(opc.equipe){ setTimeout(()=>{ $('nv-eq').value = opc.equipe; },0); }
+    $('nv-regiao').value = opc.regiao || '';
+    $('nv-massa').value = opc.massa != null ? opc.massa : '';
+    $('nv-rua').value = opc.rua || '';
+    preencherRegioes();
+    limpa('nv-err');
+    const b=$('nv-ok'), n=b.cloneNode(true); b.parentNode.replaceChild(n,b);
+    n.innerHTML = prev ? '<i class="ti ti-binoculars"></i>Abrir previsão' : '<i class="ti ti-file-plus"></i>Abrir relatório';
+    n.onclick = ()=>{
+      const data = $('nv-data').value, regiao = $('nv-regiao').value.trim();
+      if(!data){ alerta('nv-err','Informe a data.'); return; }
+      if(!regiao){ alerta('nv-err','Informe a região em que a equipe está trabalhando.'); return; }
+      if(prev && data <= hoje()){ alerta('nv-err','A previsão é para um dia que ainda vai chegar. Para hoje, abra um relatório normal.'); return; }
+      $('ov-novo').style.display='none';
+      res({data, equipe:$('nv-eq').value || ID.equipe || '', regiao, massa:parseFloat($('nv-massa').value)||0, rua:$('nv-rua').value.trim(), previsao:prev});
+    };
+    $('ov-novo').style.display='flex';
+    setTimeout(()=>$('nv-regiao').focus(), 250);
+  });
+}
+
+/* ---- Novo relatório (tela inicial) passa pela folha ---- */
+novoRelatorioFotografico = async function(){
+  const dados = await abrirFolhaNovo({previsao:false, equipe:ID.equipe});
+  if(!dados) return;
+  await abrirRelatorioCom(dados);
+};
+async function novaPrevisao(){
+  const dados = await abrirFolhaNovo({previsao:true, equipe:ID.equipe});
+  if(!dados) return;
+  await abrirRelatorioCom(dados);
+}
+async function abrirRelatorioCom(d){
+  ir('seq');
+  await new Promise(r=>setTimeout(r,220));
+  $('s-data').value = d.data;
+  if([...$('s-eq').options].some(o=>o.value===d.equipe)) $('s-eq').value = d.equipe;
+  $('s-rua').value = d.rua || '';
+  await relAtualDoDia(false);
+  const furos = REL_ATUAL ? await relFuros(REL_ATUAL.uid) : [];
+  if(!REL_ATUAL || REL_ATUAL.status==='Concluído' || furos.length || !!REL_ATUAL.previsao!==!!d.previsao){
+    const pend = d.previsao ? null : await relNaoValidado(d.data, d.equipe);
+    if(pend){
+      await relGravar(pend.rel.uid, {status:'Aberto'});
+      REL_ATUAL = (await relDoDia(d.data, d.equipe)).find(r=>r.uid===pend.rel.uid) || pend.rel;
+      await relGravar(REL_ATUAL.uid, {regiao:d.regiao, massa:d.massa});
+      await seqRender();
+      alerta('s-err', `O relatório <b>${esc(relCod(REL_ATUAL))}</b> deste dia ainda não foi validado pelo escritório: ${relPorqueTrancado(pend)}. Continue nele.`, 0);
+      return;
+    }
+    await relCriar(d.data, d.equipe);
+  }
+  await relGravar(REL_ATUAL.uid, {regiao:d.regiao, massa:d.massa, previsao:!!d.previsao,
+    ...(d.previsao ? {previsaoCriadaEm:new Date().toISOString(), previsaoPor:ID.nome} : {}),
+    ...(d.rua ? {rua:d.rua} : {})});
+  await seqRender();
+  limpa('s-err','s-aviso');
+  alerta('s-ok', d.previsao
+    ? `Previsão <b>${esc(relCod(REL_ATUAL))}</b> aberta para <b>${fmtData(d.data)}</b>. Marque cada buraco com a foto do <b>Antes</b> e as medidas — a massa prevista aparece no alto.`
+    : `Relatório <b>${esc(relCod(REL_ATUAL))}</b> aberto — região <b>${esc(d.regiao)}</b>${d.massa?`, <b>${massaBR(d.massa)} t</b> de massa`:''}. Toque em <b>Adicionar buraco</b>.`, 0);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+/* "Gerar novo relatório" depois de concluir também pergunta região e massa */
+seqNovoRelatorio = async function(){
+  const dados = await abrirFolhaNovo({previsao:false, data:$('s-data').value, equipe:$('s-eq').value||ID.equipe, regiao:REL_ATUAL?REL_ATUAL.regiao:''});
+  if(!dados) return;
+  await abrirRelatorioCom(dados);
+};
+
+/* ---- Novo buraco: "manter na mesma rua?" ---- */
+const _seqAddFuroBase = seqAddFuro;
+let ADD_APOS_RUA = false;
+seqAddFuro = async function(){
+  limpa('s-err','s-ok');
+  if(!$('s-data').value){ alerta('s-err','Informe a data do serviço.'); return; }
+  const rua = $('s-rua').value.trim();
+  if(!rua){ ADD_APOS_RUA = true; abrirTrocaRua(); return; }
+  const fica = await perguntaSheet('Manter na mesma rua?', `O próximo buraco fica na <b>${esc(rua)}</b>?`, 'Sim, mesma rua', 'Não, trocar de rua');
+  if(fica){ await _seqAddFuroBase(); return; }
+  ADD_APOS_RUA = true; abrirTrocaRua();
+};
+const _confirmarTrocaRuaBase = confirmarTrocaRua;
+confirmarTrocaRua = async function(){
+  const antes = $('s-rua').value.trim();
+  await _confirmarTrocaRuaBase();
+  const depois = $('s-rua').value.trim();
+  if(ADD_APOS_RUA && depois && (depois!==antes || !antes)){ ADD_APOS_RUA = false; await _seqAddFuroBase(); }
+  ADD_APOS_RUA = false;
+};
+
+/* ---- A previsão vira o relatório do dia quando a data chega ---- */
+async function converterPrevisoes(){
+  try{
+    const rels = await dbGetAll('relatorios');
+    const hj = hoje();
+    for(const r of rels){
+      if(r.previsao && !r.deletado && r.data && r.data <= hj){
+        await dbPut('relatorios', {...r, previsao:false, veioDePrevisao:true, convertidoEm:new Date().toISOString(), status:'Aberto'});
+      }
+    }
+  }catch(e){ console.warn('previsões', e); }
+}
+
+/* ---- barra do relatório: região, massa e previsão ---- */
+const _pintarRelBarBase = pintarRelBar;
+pintarRelBar = async function(){
+  _pintarRelBarBase();
+  const box = $('s-relbar'); if(!box || !REL_ATUAL) return;
+  const r = REL_ATUAL;
+  const furos = await seqFuros();
+  const area = furos.reduce((t,f)=>t+medArea(f),0);
+  const vol = furos.reduce((t,f)=>t+medVolume(f),0);
+  const massaEst = vol*DENS_MASSA;
+  const regiao = r.regiao ? `<span class="chip-info"><i class="ti ti-map-pin"></i>${esc(r.regiao)}</span>` : `<span class="chip-info faltando" onclick="editarRegiaoMassa()"><i class="ti ti-map-pin"></i>sem região</span>`;
+  const massa = r.previsao
+    ? `<span class="chip-info prev"><i class="ti ti-weight"></i>massa prevista ≈ <b>${massaBR(massaEst)} t</b>${r.massa?` (pedida ${massaBR(r.massa)} t)`:''}</span>`
+    : `<span class="chip-info" onclick="editarRegiaoMassa()"><i class="ti ti-weight"></i>${r.massa?`<b>${massaBR(r.massa)} t</b> carregadas`:'massa não informada'}${vol?` · usada ≈ ${massaBR(massaEst)} t`:''}</span>`;
+  const prevBar = r.previsao ? `<div class="relbar prev"><i class="ti ti-binoculars"></i><span><b>PREVISÃO</b> para <b>${fmtData(r.data)}</b> — ${furos.length} buraco(s), ${medBR(area,2)} m². Na data, vira o relatório do dia: só faltará a foto do <b>Concluído</b>.</span></div>`
+    : (r.veioDePrevisao ? `<div class="relbar"><i class="ti ti-binoculars"></i><span>Veio da <b>previsão</b>: os buracos já têm Antes e medidas. Tire só a foto do <b>Concluído</b> de cada um.</span></div>` : '');
+  box.insertAdjacentHTML('beforeend', `${prevBar}<div class="relinfo">${regiao}${massa}<span class="chip-info" onclick="editarRegiaoMassa()"><i class="ti ti-pencil"></i>editar</span></div>`);
+  const bt = $('s-concluir');
+  if(bt){ bt.innerHTML = r.previsao ? '<i class="ti ti-send"></i>Enviar previsão ao escritório' : '<i class="ti ti-checkbox"></i>Concluir · enviar e gerar relatório'; }
+  const add = $('s-add-txt'); if(add && r.previsao) add.textContent = `Marcar buraco ${furos.length+1} (foto do Antes + medidas)`;
+};
+async function editarRegiaoMassa(){
+  if(!REL_ATUAL) return;
+  const d = await abrirFolhaNovo({previsao:!!REL_ATUAL.previsao, data:REL_ATUAL.data, equipe:REL_ATUAL.equipe, regiao:REL_ATUAL.regiao, massa:REL_ATUAL.massa, rua:$('s-rua').value});
+  if(!d) return;
+  await relGravar(REL_ATUAL.uid, {regiao:d.regiao, massa:d.massa});
+  if(d.rua){ $('s-rua').value = d.rua; await relGravar(REL_ATUAL.uid, {rua:d.rua}); }
+  await seqRender();
+}
+
+/* ---- Concluir: na previsão, só envia; sem exigir a foto do Concluído ---- */
+const _seqConcluirBase = seqConcluir;
+seqConcluir = async function(){
+  if(!(REL_ATUAL && REL_ATUAL.previsao)) return _seqConcluirBase();
+  limpa('s-err','s-ok','s-aviso');
+  const furos = await seqFuros();
+  if(!furos.length){ alerta('s-err','Marque ao menos um buraco na previsão.'); return; }
+  const fotos = await dbGetAll('fotos');
+  const semAntes = furos.filter(f=>!fotos.some(x=>x.furoUid===f.uid && x.tipo==='antes')).map(f=>f.num);
+  const semMed = furos.filter(f=>!medArea(f)).map(f=>f.num);
+  const seguir = async ()=>{
+    await seqEnviarFotos(true);
+    const vol = furos.reduce((t,f)=>t+medVolume(f),0);
+    await relGravar(REL_ATUAL.uid, {previsaoEnviada:true, previsaoEnviadaEm:new Date().toISOString(), massaPrevista:Math.round(vol*DENS_MASSA*10)/10, furos:furos.length});
+    await sincronizar(true);
+    await seqRender();
+    alerta('s-ok',`Previsão <b>${esc(relCod(REL_ATUAL))}</b> enviada: <b>${furos.length}</b> buraco(s), massa prevista ≈ <b>${massaBR(vol*DENS_MASSA)} t</b>. Em <b>${fmtData(REL_ATUAL.data)}</b> ela vira o relatório do dia.`,0);
+  };
+  const avisos = [];
+  if(semAntes.length) avisos.push(`sem a foto do <b>Antes</b>: buracos ${semAntes.slice(0,10).join(', ')}`);
+  if(semMed.length) avisos.push(`sem medida: buracos ${semMed.slice(0,10).join(', ')}`);
+  if(avisos.length) confirmarSheet('Previsão incompleta', avisos.join('<br>')+'<br><br>Enviar mesmo assim?', seguir); else seguir();
+};
+
+/* ---- tela inicial: ícone da previsão e resumo das previsões abertas ---- */
+const _inicioRenderBase = inicioRender;
+inicioRender = async function(){
+  await converterPrevisoes();
+  await _inicioRenderBase();
+  try{
+    const grid = document.querySelector('#in-acoes .hgrid');
+    if(grid && !grid.querySelector('.hic-prev')){
+      const el = document.createElement('div'); el.className='hicon hic-prev'; el.onclick = novaPrevisao;
+      el.innerHTML = '<div class="ic c-yl"><i class="ti ti-binoculars"></i></div><span class="lb">Previsão (amanhã)</span>';
+      grid.insertBefore(el, grid.children[1] || null);
+    }
+    const rels = (await dbGetAll('relatorios')).filter(r=>r.previsao && !r.deletado);
+    rels.forEach(r=>{ document.querySelectorAll(`#in-acoes .hwid[onclick*="${r.uid}"]`).forEach(el=>el.remove()); });
+    if(rels.length){
+      const furos = await dbGetAll('furos');
+      const html = rels.sort((a,b)=>String(a.data).localeCompare(b.data)).map(r=>{
+        const fs = furos.filter(f=>f.relatorioUid===r.uid);
+        const vol = fs.reduce((t,f)=>t+medVolume(f),0), area = fs.reduce((t,f)=>t+medArea(f),0);
+        return `<div class="hwid" onclick="abrirPrevisao('${r.uid}')"><div class="ic c-yl"><i class="ti ti-binoculars"></i></div>
+          <div><b>Previsão para ${fmtData(r.data)}${r.regiao?' · '+esc(r.regiao):''}</b>
+          <span>${fs.length} buraco(s) · ${medBR(area,2)} m² · massa prevista ≈ ${massaBR(vol*DENS_MASSA)} t${r.previsaoEnviada?' · enviada':''}</span></div></div>`;
+      }).join('');
+      $('in-acoes').insertAdjacentHTML('beforeend', html);
+    }
+  }catch(e){ console.warn(e); }
+};
+async function abrirPrevisao(uid){
+  const r = (await dbGetAll('relatorios')).find(x=>x.uid===uid); if(!r) return;
+  ir('seq');
+  await new Promise(x=>setTimeout(x,220));
+  $('s-data').value = r.data;
+  if([...$('s-eq').options].some(o=>o.value===r.equipe)) $('s-eq').value = r.equipe;
+  if(r.rua) $('s-rua').value = r.rua;
+  REL_ATUAL = r;
+  await seqRender();
+}
+/* ao abrir a sequência de um dia, a previsão daquele dia já pode ter virado relatório */
+const _seqRenderBase = seqRender;
+seqRender = async function(){
+  await converterPrevisoes();
+  await _seqRenderBase();
+  const prev = !!(REL_ATUAL && REL_ATUAL.previsao);
+  $('t-seq').classList.toggle('previsao', prev);
+  if(!prev) return;
+  /* na previsão só o ANTES conta: o Concluído fica para o dia do serviço */
+  document.querySelectorAll('#s-lista .fcard-furo').forEach(card=>{
+    const temAntes = !!card.querySelector('.slotp.cheio[data-slot$="|antes"]');
+    const st = card.querySelector('.fh .st');
+    if(st){ st.textContent = temAntes ? 'Antes + medidas' : 'falta a foto do Antes'; st.className = 'st ' + (temAntes ? 's-ok' : 's-wn'); }
+    card.classList.toggle('ok', temAntes);
+  });
+  const add = $('s-add-txt'); if(add){ const n = document.querySelectorAll('#s-lista .fcard-furo').length; add.textContent = `Marcar buraco ${n+1} (foto do Antes + medidas)`; }
+};
+
 </script>
 </body>
 </html>
