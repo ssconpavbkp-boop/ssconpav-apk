@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SSCONPAV Campo</string>
+    <string name="title_activity_main">SSCONPAV Campo</string>
+    <string name="package_name">br.com.ssconpav.mobile</string>
+    <string name="custom_url_scheme">br.com.ssconpav.mobile</string>
+</resources>
