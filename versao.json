@@ -1,4 +1,7 @@
 {
   "appVersion": "20261001-004",
-  "notas": "Atualização automática da tela: o app procura sozinho ao abrir e de tempos em tempos e troca para a versão nova quando você está no início, sem reinstalar."
+  "notas": "Atualização automática da tela: o app procura sozinho ao abrir e de tempos em tempos e troca para a versão nova quando você está no início, sem reinstalar.",
+  "apkVersionCode": 262742005,
+  "apkVersionName": "20261001-004",
+  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
 }
