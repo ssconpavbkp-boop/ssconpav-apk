@@ -577,7 +577,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261001-004';
+const APP_VERSION = '20261002-005';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -1064,7 +1064,7 @@ async function preencherListas(){
                                                  dbGetAll('furos'),dbGetAll('equipamentos')]);
   /* Os equipamentos vêm do escritório pela sincronização — aqui só se escolhe. */
   window._eqps = eqps.map(q=>q.nome).sort((a,b)=>String(a).localeCompare(String(b)));
-  window._srvs = srvs.length ? srvs.map(s=>s.nome) : ['Recomposição de Capa Asfáltica'];
+  window._srvs = srvs.length ? srvs.map(s=>s.nome) : ['Recomposição de Capa'];
   setSel('s-srv', window._srvs.map(s=>`<option>${esc(s)}</option>`).join(''));
   preencherEquipes('a-eq'); preencherEquipes('s-eq');
   const ruas=[...new Set(furos.map(f=>f.rua).filter(Boolean))].sort();
