@@ -1,4 +1,7 @@
 {
   "appVersion": "20261002-006",
-  "notas": "Rua: campo livre para digitar, sem lista de ruas antigas nem autocompletar."
+  "notas": "Rua: campo livre para digitar, sem lista de ruas antigas nem autocompletar.",
+  "apkVersionCode": 262751315,
+  "apkVersionName": "20261002-006",
+  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
 }
