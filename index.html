@@ -361,7 +361,7 @@ body.home .top b{color:#fff}
       <div class="fg"><label>Equipe</label><select id="s-eq" onchange="seqRender()"></select></div>
     </div>
     <div class="f2">
-      <div class="fg"><label>Bairro / Rua</label><input type="text" id="s-rua" list="dl-ruas" placeholder="Ex.: Rua Farroupilha">
+      <div class="fg"><label>Bairro / Rua</label><input type="text" id="s-rua" autocomplete="off" placeholder="Ex.: Rua Farroupilha">
         <div class="hint">Repetida em cada buraco novo.</div></div>
       <div class="fg"><label>Serviço</label><select id="s-srv"></select></div>
     </div>
@@ -505,7 +505,7 @@ body.home .top b{color:#fff}
     <div class="f2">
       <div class="fg"><label id="nv-massa-rot">Massa carregada (t)</label>
         <input type="number" id="nv-massa" step="0.1" min="0" inputmode="decimal" placeholder="0,0"></div>
-      <div class="fg"><label>Rua inicial</label><input type="text" id="nv-rua" list="dl-ruas" placeholder="opcional"></div>
+      <div class="fg"><label>Rua inicial</label><input type="text" id="nv-rua" autocomplete="off" placeholder="digite a rua"></div>
     </div>
     <button class="btn p" id="nv-ok"><i class="ti ti-file-plus"></i>Abrir relatório</button>
     <button class="btn" style="margin-top:9px" onclick="document.getElementById('ov-novo').style.display='none'">Cancelar</button>
@@ -523,7 +523,7 @@ body.home .top b{color:#fff}
     <div style="font-size:13.5px;color:var(--text2);margin-bottom:14px">
       Os buracos já lançados continuam com a rua antiga. Os próximos saem com a nova.</div>
     <div class="fg"><label>Nova rua</label>
-      <input type="text" id="ru-nome" list="dl-ruas" placeholder="Ex.: Rua Bahia"></div>
+      <input type="text" id="ru-nome" autocomplete="off" placeholder="Ex.: Rua Bahia"></div>
     <div class="fg"><label>Serviço (opcional)</label><select id="ru-srv"></select></div>
     <button class="btn p" onclick="confirmarTrocaRua()"><i class="ti ti-check"></i>Continuar nesta rua</button>
     <button class="btn" style="margin-top:9px" onclick="document.getElementById('ov-rua').style.display='none'">Cancelar</button>
@@ -577,7 +577,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261002-005';
+const APP_VERSION = '20261002-006';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -1068,7 +1068,7 @@ async function preencherListas(){
   setSel('s-srv', window._srvs.map(s=>`<option>${esc(s)}</option>`).join(''));
   preencherEquipes('a-eq'); preencherEquipes('s-eq');
   const ruas=[...new Set(furos.map(f=>f.rua).filter(Boolean))].sort();
-  $('dl-ruas').innerHTML=ruas.map(r=>`<option value="${esc(r)}">`).join('');
+  $('dl-ruas').innerHTML=''; /* ruas não ficam guardadas como sugestão */
 }
 async function preencherEquipes(id){
   const eqs=await dbGetAll('equipes');
