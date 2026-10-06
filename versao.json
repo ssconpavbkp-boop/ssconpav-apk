@@ -1,7 +1,4 @@
 {
-  "appVersion": "20261006-008",
-  "notas": "Sincronização: a baixada da nuvem não perde mais registros quando muitos chegam com a mesma data; na primeira abertura refaz a baixada completa.",
-  "apkVersionCode": 262791755,
-  "apkVersionName": "20261006-008",
-  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
+  "appVersion": "20261006-009",
+  "notas": "GPS: permissões de localização no aplicativo e ajuda com botão que abre os ajustes do app."
 }

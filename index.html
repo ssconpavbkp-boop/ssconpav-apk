@@ -577,7 +577,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261006-008';
+const APP_VERSION = '20261006-009';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -3218,6 +3218,10 @@ baixar = async function(){
   }
   return total;
 };
+
+/* a ajuda do GPS tem um caminho próprio para o aplicativo instalado (botão que
+   abre os ajustes do app) — a bandeira que ela olha vinha de outra casca */
+if(noAplicativo()) window.__TESTE_NATIVO = true;
 
 </script>
 </body>
