@@ -577,7 +577,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261006-007';
+const APP_VERSION = '20261006-008';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -3173,6 +3173,51 @@ window.addEventListener('online', ()=>verificarTelaAuto(false));
    este aviso zera o contador. Se a tela estivesse estragada, este código nem
    rodaria — e na 3ª tentativa a casca volta sozinha para a tela de fábrica. */
 try{ if(noAplicativo() && typeof AndroidTeste.telaOk === 'function') AndroidTeste.telaOk(); }catch(e){}
+
+/* ======================= BAIXADA DA NUVEM SEM PERDER LINHA ===================
+   A baixada antiga paginava só pela data (atualizado_em > última). Quando mais
+   de uma página de registros tinha a MESMA data (acontece em todo envio em lote
+   — o primeiro sync de um aparelho, por exemplo), as linhas restantes daquela
+   data nunca eram lidas: cadastros e exclusões sumiam para quem estava em outro
+   aparelho. Agora pagina por (atualizado_em, uid), página grande, e na primeira
+   vez refaz a baixada completa para recuperar o que ficou para trás. */
+const PULL_UID_KEY = PULL_KEY + '_uid';
+baixar = async function(){
+  if(!localStorage.getItem('sscapp_resync_keyset')){
+    localStorage.removeItem(PULL_KEY); localStorage.removeItem(PULL_UID_KEY);
+    localStorage.setItem('sscapp_resync_keyset', '1');
+  }
+  let desde = localStorage.getItem(PULL_KEY) || '1970-01-01T00:00:00.000Z';
+  let uidDesde = localStorage.getItem(PULL_UID_KEY) || '';
+  const LIM = 200;
+  let total = 0, rodadas = 0;
+  while(rodadas++ < 80){
+    const t = encodeURIComponent(desde), u = encodeURIComponent(uidDesde);
+    const filtro = uidDesde
+      ? `&or=(atualizado_em.gt."${t}",and(atualizado_em.eq."${t}",uid.gt."${u}"))`
+      : `&atualizado_em=gt.${t}`;
+    const q = `${SYNC.tabela}?select=*&org=eq.${encodeURIComponent(SYNC.org)}${filtro}`
+            + `&order=atualizado_em.asc,uid.asc&limit=${LIM}`;
+    const linhas = await (await syncFetch(q,{method:'GET'})).json();
+    if(!linhas.length) break;
+    for(const ln of linhas){
+      desde = ln.atualizado_em; uidDesde = ln.uid;
+      if(!SYNC_STORES.includes(ln.store)) continue;
+      const all = await dbGetAll(ln.store);
+      const local = all.find(x=>x.uid===ln.uid);
+      if(ln.deletado){ if(local) await _rawDel(ln.store, local.id); total++; continue; }
+      /* alteração local mais recente que a da nuvem não é sobrescrita */
+      if(local && (local._ts||0) > new Date(ln.atualizado_em).getTime()+1500) continue;
+      const rec = {...(ln.dados||{}), uid:ln.uid};
+      if(local){ rec.id = local.id; await _rawPut(ln.store, rec); }
+      else { delete rec.id; await _rawAdd(ln.store, rec); }
+      total++;
+    }
+    localStorage.setItem(PULL_KEY, desde); localStorage.setItem(PULL_UID_KEY, uidDesde);
+    if(linhas.length < LIM) break;
+  }
+  return total;
+};
 
 </script>
 </body>

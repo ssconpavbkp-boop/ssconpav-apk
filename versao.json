@@ -1,7 +1,4 @@
 {
-  "appVersion": "20261006-007",
-  "notas": "Casca blindada: a tela baixada é servida pelo endereço interno do app (nunca como arquivo), conferida antes de usar e descartada se falhar; sem internet abre a tela de fábrica.",
-  "apkVersionCode": 262791730,
-  "apkVersionName": "20261006-007",
-  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
+  "appVersion": "20261006-008",
+  "notas": "Sincronização: a baixada da nuvem não perde mais registros quando muitos chegam com a mesma data; na primeira abertura refaz a baixada completa."
 }
