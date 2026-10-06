@@ -577,7 +577,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261002-006';
+const APP_VERSION = '20261006-007';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -3168,6 +3168,11 @@ setTimeout(()=>verificarTelaAuto(true), 5000);
 setInterval(()=>{ if(!document.hidden) verificarTelaAuto(false); }, ATU_INTERVALO);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) verificarTelaAuto(false); });
 window.addEventListener('online', ()=>verificarTelaAuto(false));
+
+/* A casca conta quantas vezes abriu a tela baixada sem ela avisar que carregou;
+   este aviso zera o contador. Se a tela estivesse estragada, este código nem
+   rodaria — e na 3ª tentativa a casca volta sozinha para a tela de fábrica. */
+try{ if(noAplicativo() && typeof AndroidTeste.telaOk === 'function') AndroidTeste.telaOk(); }catch(e){}
 
 </script>
 </body>
