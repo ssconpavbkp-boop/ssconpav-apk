@@ -84,5 +84,5 @@ jobs:
             echo 'Nada a atualizar.'
           else
             git commit -m 'Versoes atualizadas automaticamente a partir dos HTML'
-            git push
+            for i in 1 2 3 4; do git push && break; git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" || exit 1; done
           fi

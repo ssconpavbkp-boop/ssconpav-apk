@@ -118,5 +118,8 @@ jobs:
           git config user.name  'Publicador SSCONPAV'
           git config user.email 'actions@github.com'
           git add SSCONPAV-Campo.apk versao.json
-          git diff --cached --quiet && echo "Nada novo para publicar." || \
-            (git commit -m "APK ${{ steps.ver.outputs.tela }} (código ${{ steps.codigo.outputs.codigo }})" && git push)
+          if git diff --cached --quiet; then echo "Nada novo para publicar."; else
+            git commit -m "APK ${{ steps.ver.outputs.tela }} (código ${{ steps.codigo.outputs.codigo }})"
+            # outro commit pode ter entrado enquanto o build rodava: traz e tenta de novo
+            for i in 1 2 3 4; do git push && break; git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" || exit 1; done
+          fi
