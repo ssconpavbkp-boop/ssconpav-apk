@@ -121,5 +121,5 @@ jobs:
           if git diff --cached --quiet; then echo "Nada novo para publicar."; else
             git commit -m "APK ${{ steps.ver.outputs.tela }} (código ${{ steps.codigo.outputs.codigo }})"
             # outro commit pode ter entrado enquanto o build rodava: traz e tenta de novo
-            for i in 1 2 3 4; do git push && break; git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" || exit 1; done
+            for i in 1 2 3 4; do git push && break; git pull --rebase --autostash -X theirs origin "${GITHUB_REF_NAME}" || exit 1; done
           fi
