@@ -1,4 +1,7 @@
 {
   "appVersion": "20261006-007",
-  "notas": "Casca blindada: a tela baixada é servida pelo endereço interno do app (nunca como arquivo), conferida antes de usar e descartada se falhar; sem internet abre a tela de fábrica."
+  "notas": "Casca blindada: a tela baixada é servida pelo endereço interno do app (nunca como arquivo), conferida antes de usar e descartada se falhar; sem internet abre a tela de fábrica.",
+  "apkVersionCode": 262791730,
+  "apkVersionName": "20261006-007",
+  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
 }
