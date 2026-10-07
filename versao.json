@@ -1,4 +1,7 @@
 {
   "appVersion": "20261007-010",
-  "notas": "Login: ao errar a senha, o app confere no escritório antes de recusar."
+  "notas": "Login: ao errar a senha, o app confere no escritório antes de recusar.",
+  "apkVersionCode": 262801231,
+  "apkVersionName": "20261007-010",
+  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
 }
