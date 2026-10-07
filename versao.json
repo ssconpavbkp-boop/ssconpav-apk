@@ -1,7 +1,4 @@
 {
-  "appVersion": "20261006-009",
-  "notas": "GPS: permissões de localização no aplicativo e ajuda com botão que abre os ajustes do app.",
-  "apkVersionCode": 262791943,
-  "apkVersionName": "20261006-009",
-  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
+  "appVersion": "20261007-010",
+  "notas": "Login: ao errar a senha, o app confere no escritório antes de recusar."
 }

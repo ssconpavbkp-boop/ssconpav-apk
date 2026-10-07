@@ -577,7 +577,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261006-009';
+const APP_VERSION = '20261007-010';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -3207,7 +3207,7 @@ baixar = async function(){
       const local = all.find(x=>x.uid===ln.uid);
       if(ln.deletado){ if(local) await _rawDel(ln.store, local.id); total++; continue; }
       /* alteração local mais recente que a da nuvem não é sobrescrita */
-      if(local && (local._ts||0) > new Date(ln.atualizado_em).getTime()+1500) continue;
+      if(ln.store!=='usuarios' && local && (local._ts||0) > new Date(ln.atualizado_em).getTime()+1500) continue;
       const rec = {...(ln.dados||{}), uid:ln.uid};
       if(local){ rec.id = local.id; await _rawPut(ln.store, rec); }
       else { delete rec.id; await _rawAdd(ln.store, rec); }
@@ -3222,6 +3222,22 @@ baixar = async function(){
 /* a ajuda do GPS tem um caminho próprio para o aplicativo instalado (botão que
    abre os ajustes do app) — a bandeira que ela olha vinha de outra casca */
 if(noAplicativo()) window.__TESTE_NATIVO = true;
+
+/* senha trocada no escritório: ao errar, baixa a lista de usuários e confere de novo */
+const _entrarBaseApp = entrar;
+entrar = async function(){
+  const login=$('lg-user').value.trim().toLowerCase(), senha=$('lg-pass').value;
+  if(login && senha && conectado() && navigator.onLine){
+    try{
+      const us=await dbGetAll('usuarios'); const u=us.find(x=>(x.login||'').toLowerCase()===login);
+      if(!u || u.hash!==hashSenha(senha,u.salt)){
+        const btn=$('lg-btn'); if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-cloud-download"></i>Conferindo no escritório...'; }
+        await baixar();
+      }
+    }catch(e){}
+  }
+  return _entrarBaseApp();
+};
 
 </script>
 </body>
