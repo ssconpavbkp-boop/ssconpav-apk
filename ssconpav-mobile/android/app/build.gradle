@@ -16,8 +16,25 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    /* Assinatura FIXA do app. Sem isto cada build do robô era assinado com uma
+       chave de debug nova, e o Android recusava instalar a versão nova por cima
+       da antiga ("conflito com um pacote já existente"). O keystore mora no
+       repositório; se um dia houver os Secrets de release, eles têm prioridade
+       (o robô passa -Pandroid.injected.signing.*). */
+    signingConfigs {
+        ssconpav {
+            storeFile file('ssconpav.keystore')
+            storePassword 'ssconpav2026'
+            keyAlias 'ssconpav'
+            keyPassword 'ssconpav2026'
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.ssconpav
+        }
         release {
+            signingConfig signingConfigs.ssconpav
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
