@@ -370,12 +370,11 @@ body.home .top b{color:#fff}
 
   <div id="s-gps" class="gpsbar" onclick="ativarGPS(true)"></div>
   <div class="kg" id="s-kpis"></div>
-  <div id="s-lista"></div>
-
-  <button class="btn o" id="s-add" onclick="seqAddFuro()" style="margin-bottom:9px">
+  <button class="btn p" id="s-add" onclick="seqAddFuro()" style="margin-bottom:9px">
     <i class="ti ti-plus"></i><span id="s-add-txt">Adicionar buraco (2 a 4 fotos)</span></button>
   <button class="btn" id="s-rua-btn" onclick="abrirTrocaRua()" style="margin-bottom:12px">
     <i class="ti ti-road"></i><span id="s-rua-txt">Trocar rua</span></button>
+  <div id="s-lista"></div>
 
   <div class="card">
     <div class="sh"><i class="ti ti-send"></i>Fechar o dia</div>
@@ -548,12 +547,12 @@ body.home .top b{color:#fff}
     <div style="font-size:13.5px;color:var(--text2);margin-bottom:14px" id="md-sub">
       Foto guardada. Meça o buraco agora, enquanto ele está na sua frente.</div>
     <div class="medrow" style="margin-top:0">
-      <div><label>Compr. (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
-        id="md-comp" placeholder="0,00" oninput="medSheetPinta()"></div>
       <div><label>Largura (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
         id="md-larg" placeholder="0,00" oninput="medSheetPinta()"></div>
-      <div><label>Prof. (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
-        id="md-prof" placeholder="0,00" oninput="medSheetPinta()"></div>
+      <div><label>Compr. (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
+        id="md-comp" placeholder="0,00" oninput="medSheetPinta()"></div>
+      <div><label>Espessura (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
+        id="md-prof" placeholder="0,03" oninput="medSheetPinta()"></div>
     </div>
     <div class="medres vazio" id="md-res" style="margin-bottom:14px">
       Comprimento e largura em metros — 80 cm é 0,80.</div>
@@ -577,7 +576,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261007-010';
+const APP_VERSION = '20261008-011';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -1643,12 +1642,12 @@ async function seqAddFuro(){
     relatorioUid:REL_ATUAL.uid,
     num, data:$('s-data').value,
     rua:$('s-rua').value.trim(), servico:$('s-srv').value, equipe:$('s-eq').value||ID.equipe,
-    comp:'', larg:'', prof:'', equipamento:'',
+    comp:'', larg:'', prof:'0.03', equipamento:'',   /* espessura padrão 3 cm, editável */
     origem:'mobile', dispositivo:ID.dispositivo, lancadoPor:ID.nome, lancadoLogin:ID.login,
     status:'Pendente', validadoPor:'', validadoEm:'', motivoDevolucao:''
   });
   await seqRender();
-  const el = document.querySelector('#s-lista .fcard-furo:last-child');
+  const el = document.querySelector('#s-lista .fcard-furo:first-child');
   if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
 }
 async function seqSetCampo(uid, campo, valor){
@@ -1853,7 +1852,7 @@ function medPinta(uid){
     box.textContent = 'Meça o buraco: comprimento e largura em metros.'; return; }
   box.className = 'medres';
   box.innerHTML = `Área <b>${medBR(a,2)} m²</b>`
-    + (medNum(f.prof) ? ` · Volume <b>${medBR(medVolume(f),3)} m³</b>` : ' · falta a profundidade');
+    + (medNum(f.prof) ? ` · Volume <b>${medBR(medVolume(f),3)} m³</b>` : ' · falta a espessura');
 }
 /* A medida pedida na hora da foto: quem está na rua tem o buraco na frente,
    e depois ninguém volta lá para medir. Dá para pular — os mesmos três campos
@@ -1870,7 +1869,7 @@ async function medSheetAbrir(uid){
   $('md-prof').value = medNum(f.prof)||'';
   medSheetPinta();
   $('ov-med').style.display = 'flex';
-  setTimeout(()=>{ try{ $('md-comp').focus(); }catch(e){} }, 200);
+  setTimeout(()=>{ try{ $('md-larg').focus(); }catch(e){} }, 200);
 }
 function medSheetPinta(){
   const box = $('md-res'); if(!box) return;
@@ -1879,7 +1878,7 @@ function medSheetPinta(){
   if(!a){ box.className='medres vazio'; box.textContent='Comprimento e largura em metros — 80 cm é 0,80.'; return; }
   box.className='medres';
   box.innerHTML = `Área <b>${medBR(a,2)} m²</b>`
-    + (medNum(f.prof) ? ` · Volume <b>${medBR(medVolume(f),3)} m³</b>` : ' · falta a profundidade');
+    + (medNum(f.prof) ? ` · Volume <b>${medBR(medVolume(f),3)} m³</b>` : ' · falta a espessura');
 }
 function medSheetFechar(){ $('ov-med').style.display='none'; MED_SHEET_UID = null; }
 async function medSheetSalvar(){
@@ -1960,14 +1959,14 @@ async function seqRender(){
             <select onchange="medGravar('${f.uid}','equipamento',this.value)">${EQP_OPCOES(f.equipamento)}</select>
           </div>
           <div class="medrow">
-            <div><label>Compr. (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
-              data-med="${f.uid}|comp" value="${medNum(f.comp)||''}" placeholder="0,00"
-              oninput="medPinta('${f.uid}')" onchange="medGravar('${f.uid}','comp',this.value)"></div>
             <div><label>Largura (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
               data-med="${f.uid}|larg" value="${medNum(f.larg)||''}" placeholder="0,00"
               oninput="medPinta('${f.uid}')" onchange="medGravar('${f.uid}','larg',this.value)"></div>
-            <div><label>Prof. (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
-              data-med="${f.uid}|prof" value="${medNum(f.prof)||''}" placeholder="0,00"
+            <div><label>Compr. (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
+              data-med="${f.uid}|comp" value="${medNum(f.comp)||''}" placeholder="0,00"
+              oninput="medPinta('${f.uid}')" onchange="medGravar('${f.uid}','comp',this.value)"></div>
+            <div><label>Espessura (m)</label><input type="number" step="0.01" min="0" inputmode="decimal"
+              data-med="${f.uid}|prof" value="${medNum(f.prof)||''}" placeholder="0,03"
               oninput="medPinta('${f.uid}')" onchange="medGravar('${f.uid}','prof',this.value)"></div>
           </div>
           <div class="medres vazio" id="md-${f.uid}" onclick="medSheetAbrir('${f.uid}')"
@@ -3081,6 +3080,9 @@ const _seqRenderBase = seqRender;
 seqRender = async function(){
   await converterPrevisoes();
   await _seqRenderBase();
+  /* o buraco mais novo fica no topo, logo abaixo do botão de adicionar */
+  const lista = $('s-lista');
+  if(lista){ const cards = [...lista.querySelectorAll(':scope > .fcard-furo')]; cards.reverse().forEach(c=>lista.appendChild(c)); }
   const prev = !!(REL_ATUAL && REL_ATUAL.previsao);
   $('t-seq').classList.toggle('previsao', prev);
   if(!prev) return;
@@ -3237,6 +3239,20 @@ entrar = async function(){
     }catch(e){}
   }
   return _entrarBaseApp();
+};
+
+/* espessura: quem ainda não tem, abre a medida já com 0,03 (editável) */
+const _medSheetAbrirBase = medSheetAbrir;
+medSheetAbrir = async function(uid){
+  await _medSheetAbrirBase(uid);
+  const p = $('md-prof'); if(p && !p.value){ p.value = '0.03'; medSheetPinta(); }
+};
+/* foto da galeria só para o GESTOR: para os demais a câmera abre direto */
+const _seqTirarBase = seqTirar;
+seqTirar = function(furoUid, tipo){
+  const inp = $('seq-file');
+  if(inp){ if(ID.perfil === 'g') inp.removeAttribute('capture'); else inp.setAttribute('capture','environment'); }
+  return _seqTirarBase(furoUid, tipo);
 };
 
 </script>

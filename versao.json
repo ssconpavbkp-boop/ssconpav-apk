@@ -1,7 +1,4 @@
 {
-  "appVersion": "20261007-010",
-  "notas": "Login: ao errar a senha, o app confere no escritório antes de recusar.",
-  "apkVersionCode": 262801312,
-  "apkVersionName": "20261007-010",
-  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
+  "appVersion": "20261008-011",
+  "notas": "Medidas na ordem Largura, Comprimento e Espessura, com espessura já em 0,03 (editável); botão de novo buraco no topo e o buraco mais novo em primeiro; foto da galeria só para o Gestor."
 }
