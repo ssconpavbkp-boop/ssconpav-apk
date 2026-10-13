@@ -576,7 +576,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261013-012';
+const APP_VERSION = '20261013-013';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -3247,16 +3247,14 @@ medSheetAbrir = async function(uid){
   await _medSheetAbrirBase(uid);
   const p = $('md-prof'); if(p && !p.value){ p.value = '0.03'; medSheetPinta(); }
 };
-/* A câmera abre direto para todo mundo. Só o GESTOR ganha a escolha
-   "Tirar foto / Escolher da galeria" — e mesmo para ele o padrão é a câmera. */
+/* Toda foto pergunta: "Tirar foto agora" (câmera, o padrão) ou "Escolher da
+   galeria". Com o atributo capture o Capacitor abre a câmera; sem ele, o
+   seletor de arquivos/galeria. */
 const _seqTirarBase = seqTirar;
 seqTirar = async function(furoUid, tipo){
   const inp = $('seq-file'); if(!inp) return _seqTirarBase(furoUid, tipo);
-  inp.setAttribute('capture','environment');
-  if(ID.perfil === 'g'){
-    const camera = await perguntaSheet('Foto do buraco', 'Tirar a foto agora ou escolher uma já existente?', 'Tirar foto agora', 'Escolher da galeria');
-    if(!camera) inp.removeAttribute('capture');
-  }
+  const camera = await perguntaSheet('Foto do buraco', 'Tirar a foto agora ou escolher uma já existente na galeria?', 'Tirar foto agora', 'Escolher da galeria');
+  if(camera) inp.setAttribute('capture','environment'); else inp.removeAttribute('capture');
   return _seqTirarBase(furoUid, tipo);
 };
 

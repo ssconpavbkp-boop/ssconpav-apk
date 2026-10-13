@@ -1,8 +1,4 @@
 {
-  "appVersion": "20261013-012",
-  "apkVersionCode": 262861942,
-  "apkVersionName": "20261008-011",
-  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk",
-  "publicadoEm": "2026-10-13T19:58:43Z",
-  "notas": "Robô publicar: git add arquivo a arquivo (um ausente cancelava o outro)"
+  "appVersion": "20261013-013",
+  "notas": "Foto: toda vez pergunta se quer tirar a foto agora (câmera) ou escolher da galeria, para todos os perfis."
 }
