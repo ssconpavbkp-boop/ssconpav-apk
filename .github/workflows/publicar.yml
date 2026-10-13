@@ -71,8 +71,9 @@ jobs:
             fi
           }
 
+          adicionar() { for f in versao.json versao-sistema.json; do [ -f "$f" ] && git add "$f"; done; true; }
           reescrever
-          git add versao.json versao-sistema.json 2>/dev/null || true
+          adicionar
           if git diff --cached --quiet; then echo 'Nada a atualizar.'; exit 0; fi
           git commit -m 'Versoes atualizadas automaticamente a partir dos HTML'
           for i in 1 2 3 4 5; do
@@ -81,7 +82,7 @@ jobs:
             git fetch origin "${GITHUB_REF_NAME}"
             git reset -q --hard "origin/${GITHUB_REF_NAME}"
             reescrever
-            git add versao.json versao-sistema.json 2>/dev/null || true
+            adicionar
             git commit -q -m 'Versoes atualizadas automaticamente a partir dos HTML' || true
           done
           echo "Nao consegui publicar depois de 5 tentativas"; exit 1
