@@ -101,10 +101,15 @@ jobs:
           ./gradlew assembleDebug
           cp app/build/outputs/apk/debug/app-debug.apk ../../SSCONPAV-Campo.apk
 
-      - name: Atualizar o versao.json com a versão do app
+      - name: Publicar o .apk e o versao.json (fundindo com o que já estiver na nuvem)
         working-directory: .
         run: |
-          python3 - << 'PY'
+          git config user.name  'Publicador SSCONPAV'
+          git config user.email 'actions@github.com'
+          # Grava SÓ os campos do app no versao.json que estiver no repositório
+          # (o appVersion da tela é do robô "Publicar o canal" — não mexer nele).
+          fundir() {
+            python3 - << 'PY'
           import json
           v = json.load(open('versao.json'))
           v['apkVersionCode'] = int("${{ steps.codigo.outputs.codigo }}")
@@ -112,15 +117,20 @@ jobs:
           v['apkUrl'] = "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
           json.dump(v, open('versao.json','w'), indent=2, ensure_ascii=False)
           PY
-
-      - name: Publicar o .apk e o versao.json
-        run: |
-          cd ..
-          git config user.name  'Publicador SSCONPAV'
-          git config user.email 'actions@github.com'
+          }
+          fundir
           git add SSCONPAV-Campo.apk versao.json
-          if git diff --cached --quiet; then echo "Nada novo para publicar."; else
-            git commit -m "APK ${{ steps.ver.outputs.tela }} (código ${{ steps.codigo.outputs.codigo }})"
-            # outro commit pode ter entrado enquanto o build rodava: traz e tenta de novo
-            for i in 1 2 3 4; do git push && break; git pull --rebase --autostash -X theirs origin "${GITHUB_REF_NAME}" || exit 1; done
-          fi
+          if git diff --cached --quiet; then echo "Nada novo para publicar."; exit 0; fi
+          git commit -m "APK ${{ steps.ver.outputs.tela }} (código ${{ steps.codigo.outputs.codigo }})"
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            # outro commit entrou enquanto o build rodava: volta para o estado do
+            # remoto, mantém o .apk novo e funde os campos no versao.json de lá
+            git fetch origin "${GITHUB_REF_NAME}"
+            git reset -q "origin/${GITHUB_REF_NAME}"
+            git checkout -- versao.json
+            fundir
+            git add SSCONPAV-Campo.apk versao.json
+            git commit -q -m "APK ${{ steps.ver.outputs.tela }} (código ${{ steps.codigo.outputs.codigo }})" || true
+          done
+          echo "Não consegui publicar depois de 5 tentativas"; exit 1
