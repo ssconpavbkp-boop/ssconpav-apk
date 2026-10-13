@@ -35,6 +35,17 @@
         </provider>
     </application>
 
+    <!-- Android 11+ esconde os outros apps: sem esta declaração o app "não
+         enxerga" a câmera, acha que não existe e cai na galeria -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.VIDEO_CAPTURE" />
+        </intent>
+    </queries>
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
