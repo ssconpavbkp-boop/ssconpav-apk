@@ -1,5 +1,8 @@
 {
   "appVersion": "20261013-013",
+  "apkVersionCode": 262861942,
+  "apkVersionName": "20261008-011",
+  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk",
   "publicadoEm": "2026-10-13T20:06:46Z",
-  "notas": "App 20261013-013: câmera ou galeria para todos os perfis"
+  "notas": "Foto: toda vez pergunta se quer tirar a foto agora (câmera) ou escolher da galeria, para todos os perfis."
 }
