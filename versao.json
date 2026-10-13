@@ -1,4 +1,7 @@
 {
-  "appVersion": "20261013-012",
-  "notas": "Foto: a câmera abre direto para todos; o Gestor escolhe entre tirar foto ou galeria. Aplicativo novo com a câmera declarada para o Android 11+."
+  "appVersion": "20261008-011",
+  "notas": "Medidas na ordem Largura, Comprimento e Espessura, com espessura já em 0,03 (editável); botão de novo buraco no topo e o buraco mais novo em primeiro; foto da galeria só para o Gestor.",
+  "apkVersionCode": 262861942,
+  "apkVersionName": "20261008-011",
+  "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk"
 }
