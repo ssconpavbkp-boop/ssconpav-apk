@@ -3,11 +3,13 @@ package br.com.ssconpav.mobile;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebViewClient;
 import com.getcapacitor.ServerPath;
-import com.getcapacitor.WebViewListener;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -29,8 +31,9 @@ import java.io.InputStreamReader;
  *      (Tela.integra): tamanho mínimo, APP_VERSION dentro, fecha com </html>;
  *   2. a versão dela não pode ser mais velha que a de fábrica (um APK novo
  *      descarta telas antigas);
- *   3. se já tentou abrir 3 vezes sem a tela avisar que carregou
- *      (AndroidTeste.telaOk), ela é descartada.
+ *   3. se já tentou abrir 3 vezes sem a tela avisar que iniciou bem
+ *      (AndroidTeste.telaOk, chamado só depois do início dar certo), ela é descartada;
+ *   4. só um erro na página principal (nunca de foto/mapa/script remoto) a derruba na hora.
  * Em qualquer falha o app abre a tela de fábrica, que funciona sem internet;
  * a atualização acontece de novo quando a conexão voltar.
  */
@@ -76,22 +79,31 @@ public class MainActivity extends BridgeActivity {
             prefs.edit().putString("tela_versao", versaoFabrica).apply();
         }
 
-        /* Se a página principal falhar de verdade enquanto servimos a tela
-           baixada, volta para a de fábrica na hora — sem esperar 3 aberturas. */
-        bridgeBuilder.addWebViewListener(new WebViewListener() {
-            @Override public void onReceivedError(WebView webView) {
+        super.load();
+
+        /* Só a PÁGINA PRINCIPAL falhando derruba a tela baixada. O ouvinte
+           padrão do Capacitor avisava erro de QUALQUER recurso (uma foto
+           remota, um mapa, um script de CDN sem internet) — e aí, offline, a
+           tela baixada era descartada e o app caía na de fábrica, que não
+           conseguia abrir o banco de dados mais novo. */
+        getBridge().setWebViewClient(new BridgeWebViewClient(getBridge()) {
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request != null && !request.isForMainFrame()) {
+                    Log.d(TAG, "Recurso secundário falhou (ignorado): " + request.getUrl());
+                    return;
+                }
+                super.onReceivedError(view, request, error);
                 if (usandoTelaBaixada) {
                     Log.w(TAG, "Erro ao carregar a tela baixada — voltando para a de fábrica");
                     usandoTelaBaixada = false;
                     Tela.descartar(MainActivity.this);
                     String vf = lerVersaoDoAsset();
                     if (vf != null) getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("tela_versao", vf).apply();
-                    if (getBridge() != null) getBridge().setServerAssetPath("public");
+                    getBridge().setServerAssetPath("public");
                 }
             }
         });
-
-        super.load();
 
         WebView webView = getBridge().getWebView();
         webView.addJavascriptInterface(new AndroidTeste(this, webView), "AndroidTeste");
