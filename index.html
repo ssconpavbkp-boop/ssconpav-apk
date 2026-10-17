@@ -576,7 +576,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261013-013';
+const APP_VERSION = '20261017-014';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -593,7 +593,7 @@ const NUVEM = {
 };
 
 /* ------------------------------- BANCO ---------------------------------- */
-const DB_NAME='SSCONPAV_CAMPO_DB', DB_VERSION=6;   /* bump obrigatorio ao somar store */
+const DB_NAME='SSCONPAV_CAMPO_DB', DB_VERSION=7;   /* bump obrigatorio ao somar store */
 const STORES=['furos','relatorios','equipes','servicos','equipamentos','equipuso','historico','dispositivos','usuarios','fotos','imagens'];
 /* 'imagens' guarda os bytes das fotos e NUNCA sobe pela tabela: as imagens vao para o Storage. */
 const SYNC_STORES=['furos','relatorios','equipes','servicos','equipamentos','equipuso','historico','dispositivos','usuarios','fotos'];
@@ -606,6 +606,9 @@ function initDB(){
     req.onupgradeneeded=e=>{
       const d=e.target.result;
       STORES.forEach(s=>{ if(!d.objectStoreNames.contains(s)) d.createObjectStore(s,{keyPath:'id',autoIncrement:true}); });
+      /* índices: achar a imagem de UMA foto sem carregar todas na memória */
+      try{ const st=e.target.transaction.objectStore('imagens'); if(!st.indexNames.contains('fotoUid')) st.createIndex('fotoUid','fotoUid',{unique:false}); }catch(err){ console.warn(err); }
+      try{ const st=e.target.transaction.objectStore('fotos'); if(!st.indexNames.contains('furoUid')) st.createIndex('furoUid','furoUid',{unique:false}); }catch(err){ console.warn(err); }
     };
     req.onsuccess=e=>{db=e.target.result;res(db)};
     req.onerror=e=>rej(e.target.error);
@@ -1663,8 +1666,7 @@ function seqExcluirFuro(uid, num){
       const f = todos.find(x=>x.uid===uid);
       const fts = await seqFotosDe(uid);
       for(const ft of fts){
-        const imgs = await dbGetAll('imagens');
-        const im = imgs.find(i=>i.fotoUid===ft.uid);
+        const im = await imgPorFoto(ft.uid);
         if(im) await _rawDel('imagens', im.id);
         await _rawDel('fotos', ft.id);
         fila('fotos', ft.uid, true);
@@ -1682,8 +1684,7 @@ function excluirRelatorio(uid){
       const furos = await relFuros(uid);
       for(const f of furos){
         for(const ft of await seqFotosDe(f.uid)){
-          const imgs = await dbGetAll('imagens');
-          const im = imgs.find(i=>i.fotoUid===ft.uid);
+          const im = await imgPorFoto(ft.uid);
           if(im) await _rawDel('imagens', im.id);
           await _rawDel('fotos', ft.id); fila('fotos', ft.uid, true);
         }
@@ -1793,9 +1794,9 @@ async function seqRecebeuFoto(input){
     if(ja){ registro.uid = ja.uid; registro.id = ja.id; await dbPut('fotos', registro); fotoUid = ja.uid; }
     else { await dbAdd('fotos', registro); fotoUid = (await seqFotosDe(furoUid)).find(x=>x.tipo===tipo).uid; }
 
-    const imgs = await dbGetAll('imagens');
-    const antiga = imgs.find(i=>i.fotoUid===fotoUid);
-    const linha = {fotoUid, original, carimbada, completa:enderecoOk};
+    const antiga = await imgPorFoto(fotoUid);
+    let mini = ''; try{ mini = await encolher(carimbada, MINI_TELA, 0.6); }catch(e){}
+    const linha = {fotoUid, original, carimbada, completa:enderecoOk, mini};
     if(antiga) await _rawPut('imagens', {...antiga, ...linha});
     else await _rawAdd('imagens', linha);
 
@@ -1917,8 +1918,8 @@ async function seqRender(){
     const todasFotos = await dbGetAll('fotos');
     const mapaF = new Map();
     todasFotos.forEach(x=>{ mapaF.set(x.furoUid+'|'+x.tipo, x); });
-    const imgs = await dbGetAll('imagens');
-    const mapaI = new Map(imgs.map(i=>[i.fotoUid, i]));
+    const uidsFuros = new Set(furos.map(f=>f.uid));
+    const mapaI = await imgsPorFotos(todasFotos.filter(x=>uidsFuros.has(x.furoUid)).map(x=>x.uid));
 
     let nFotos = 0, semEnd = 0, aEnviar = 0, semGps = 0;
     const html = furos.map(f=>{
@@ -1935,7 +1936,7 @@ async function seqRender(){
         if(!fo.enderecoOk) semEnd++;
         if(fo.lat == null) semGps++;
         const im = mapaI.get(fo.uid);
-        const src = im ? im.carimbada : (fo.url||'');
+        const src = im ? (im.mini || im.carimbada) : (fo.urlMini || fo.url || '');
         const gpsCls = fo.lat!=null ? '' : ' no';
         const gpsTxt = fo.lat!=null ? (fo.enderecoOk?'GPS+END':'GPS') : 'SEM GPS';
         return `<div class="slotp cheio" data-slot="${f.uid}|${tipo}" onclick="seqTirar('${f.uid}','${tipo}')">
@@ -2116,16 +2117,14 @@ async function seqEnviarFotos(silencioso){
   const fotos = (await dbGetAll('fotos')).filter(x=>uids.has(x.furoUid));
   const pend = fotos.filter(x=>!x.enviada);
   if(!pend.length){ if(!silencioso) alerta('s-ok','Todas as fotos deste dia já estão no escritório.'); return true; }
-  const imgs = await dbGetAll('imagens');
-  const mapaI = new Map(imgs.map(i=>[i.fotoUid,i]));
   let ok = 0, falhas = 0;
   for(let i=0;i<pend.length;i++){
     const fo = pend[i];
     alerta('s-prog', `Enviando foto <b>${i+1}</b> de <b>${pend.length}</b>...
       <div class="barra"><div style="width:${Math.round((i/pend.length)*100)}%"></div></div>`, 0);
     try{
-      const im = mapaI.get(fo.uid);
-      if(!im){ falhas++; continue; }
+      const im = await imgPorFoto(fo.uid);
+      if(!im || !im.carimbada){ falhas++; continue; }
       let carimbada = im.carimbada;
       /* completa o endereço agora que há internet e refaz o carimbo */
       if(!fo.enderecoOk && fo.lat != null){
@@ -2137,7 +2136,8 @@ async function seqEnviarFotos(silencioso){
             heading:fo.heading, direcao:fo.direcao, indice:fo.indice, endereco:end, mapa
           });
           fo.endereco = end; fo.enderecoOk = true; fo.temMapa = !!mapa;
-          await _rawPut('imagens', {...im, carimbada, completa:true});
+          let mini = im.mini; try{ mini = await encolher(carimbada, MINI_TELA, 0.6); }catch(e){}
+          await _rawPut('imagens', {...im, carimbada, completa:true, mini});
         }catch(e){ console.warn('endereço adiado', e); }
       }
       const url = await stEnviar(fo.arquivo || stCaminho(fo), carimbada);
@@ -2151,7 +2151,7 @@ async function seqEnviarFotos(silencioso){
       await dbPut('fotos', {...fo, enviada:true, url, urlMini, arquivoMini,
         enviadaEm:new Date().toISOString()});
       /* libera espaço: o original não é mais necessário depois do envio */
-      const im2 = (await dbGetAll('imagens')).find(x=>x.fotoUid===fo.uid);
+      const im2 = await imgPorFoto(fo.uid);
       if(im2) await _rawPut('imagens', {...im2, original:null});
       ok++;
     }catch(err){ console.error(err); falhas++; }
@@ -2185,9 +2185,9 @@ async function seqGerarPDF(compartilhar){
     const jsPDF = await carregarJsPDF();
     const doc = new jsPDF({unit:'mm', format:'a4', orientation:'portrait', compress:true});
 
-    const fotos = await dbGetAll('fotos');
-    const imgs = await dbGetAll('imagens');
-    const mapaI = new Map(imgs.map(i=>[i.fotoUid,i]));
+    const uidsF = new Set(furos.map(f=>f.uid));
+    const fotos = (await dbGetAll('fotos')).filter(x=>uidsF.has(x.furoUid));
+    const mapaI = await imgsPorFotos(fotos.map(x=>x.uid));
     const mapaF = new Map(); fotos.forEach(x=>mapaF.set(x.furoUid+'|'+x.tipo,x));
 
     /* Um buraco por quadro, com os quatro espaços dele. */
@@ -2223,8 +2223,9 @@ async function seqGerarPDF(compartilhar){
         par.forEach(f=>{ FOTO_TIPOS.forEach(t=>{
           const fo = mapaF.get(f.uid+'|'+t);
           const im = fo && mapaI.get(fo.uid);
-          cel.push(im ? im.carimbada : null);
+          cel.push((im && im.carimbada) || (fo && fo.url) || (im && im.mini) || null);
         }); });
+        for(let ci=0; ci<cel.length; ci++){ if(typeof cel[ci]==='string' && /^https?:/.test(cel[ci])) cel[ci] = await baixarDataUrl(cel[ci]); }
         for(let ci=0; ci<cel.length; ci++){
           const cx = x0 + (ci%2)*(COL/2), cy = y0 + Math.floor(ci/2)*HF;
           if(cel[ci]){ try{ doc.addImage(cel[ci], 'JPEG', cx, cy, COL/2, HF); }catch(e){} }
@@ -2655,9 +2656,8 @@ const REL_CLS = {'Validado':'s-ok','Devolvido':'s-rd','Pendente':'s-wn','Vazio':
 
 async function renderMeus(){
   try{
-    const [furos, rels, fotos, imgs] = await Promise.all([
-      dbGetAll('furos'), dbGetAll('relatorios'), dbGetAll('fotos'), dbGetAll('imagens')]);
-    const mapI = new Map(imgs.map(i=>[i.fotoUid,i]));
+    const [furos, rels, fotos] = await Promise.all([
+      dbGetAll('furos'), dbGetAll('relatorios'), dbGetAll('fotos')]);
     const meu = x => !ID.nome || !x.lancadoPor || x.lancadoPor===ID.nome || x.dispositivo===ID.dispositivo;
 
     const porRel = new Map();
@@ -2675,7 +2675,7 @@ async function renderMeus(){
       const fts = fotos.filter(x=>fs.some(f=>f.uid===x.furoUid));
       const sit = relSituacao(fs, r);
       const devolvidos = fs.filter(f=>f.status==='Devolvido');
-      const capas = fts.slice(0,2).map(x=>{ const im = mapI.get(x.uid); return (im&&im.carimbada) || x.url || ''; });
+      const capas = fts.slice(0,2).map(x=>({uid:x.uid, url:x.urlMini || x.url || ''}));
       return {r, fs, sit, devolvidos, nFotos:fts.length, capas};
     }).sort((a,b)=>{
       const pa = a.sit==='Devolvido'?0:1, pb = b.sit==='Devolvido'?0:1;
@@ -2716,7 +2716,7 @@ async function renderMeus(){
         ${r.corrigido?`<div class="al aw show" style="margin:10px 12px 0"><i class="ti ti-pencil"></i>
           <span>Correção enviada por <b>${esc(r.corrigidoPor||'')}</b> em
           ${r.corrigidoEm?new Date(r.corrigidoEm).toLocaleString('pt-BR'):''}${r.conferido?' — já conferida pelo escritório':' — aguardando conferência'}</span></div>`:''}
-        <div class="th">${[0,1].map(i=>l.capas[i]?`<img src="${l.capas[i]}">`:`<div class="vz">sem foto</div>`).join('')}</div>
+        <div class="th">${[0,1].map(i=>l.capas[i]?`<img data-capa="${l.capas[i].uid}" src="${l.capas[i].url||PIXEL_VAZIO_MINI}">`:`<div class="vz">sem foto</div>`).join('')}</div>
         <div class="ib">
           <div class="ln"><span>Equipe</span><b>${esc(r.equipe||'—')}</b></div>
           <div class="ln"><span>Buracos / fotos</span><b>${l.fs.length}</b> buraco(s) · <b>${l.nFotos}</b> foto(s)</div>
@@ -3257,6 +3257,87 @@ seqTirar = async function(furoUid, tipo){
   if(camera) inp.setAttribute('capture','environment'); else inp.removeAttribute('capture');
   return _seqTirarBase(furoUid, tipo);
 };
+
+/* ======================= MEMÓRIA: fotos sem travar o aparelho ===============
+   Antes, toda tela carregava TODAS as imagens do aparelho (original + carimbada,
+   ~0,5 MB cada) na memória, a cada render, envio, PDF e na lista "Meus": com
+   semanas de fotos isso passava de centenas de MB e o Android matava o app.
+   Agora: (1) imagem é lida uma a uma por índice; (2) a tela mostra miniaturas
+   (320 px); (3) fotos já enviadas e antigas perdem a cópia grande local (fica
+   a miniatura; o escritório tem a original); (4) miniaturas faltantes são
+   geradas aos poucos em segundo plano. */
+const MINI_TELA = 320;
+const PIXEL_VAZIO_MINI = 'data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+function imgPorFoto(fotoUid){
+  return new Promise((res)=>{
+    try{
+      const st = db.transaction('imagens','readonly').objectStore('imagens');
+      if(st.indexNames.contains('fotoUid')){
+        const q = st.index('fotoUid').get(fotoUid);
+        q.onsuccess = ()=>res(q.result||null); q.onerror = ()=>res(null);
+      } else {
+        /* sem índice (banco antigo ainda não migrado): varre sem guardar tudo */
+        const c = st.openCursor(); c.onsuccess = e=>{ const cur=e.target.result; if(!cur) return res(null); if(cur.value.fotoUid===fotoUid) return res(cur.value); cur.continue(); }; c.onerror = ()=>res(null);
+      }
+    }catch(e){ res(null); }
+  });
+}
+async function imgsPorFotos(uids){
+  const m = new Map();
+  for(const u of uids){ const im = await imgPorFoto(u); if(im) m.set(u, im); }
+  return m;
+}
+/* PDF de foto antiga (cópia grande já limpa): baixa a remota na hora */
+async function baixarDataUrl(url){
+  try{
+    const r = await fetch(url, {cache:'force-cache'}); if(!r.ok) return null;
+    const b = await r.blob();
+    return await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>res(null); fr.readAsDataURL(b); });
+  }catch(e){ return null; }
+}
+/* capas da lista "Meus": miniatura local quando não há endereço remoto */
+async function pintarCapasMeus(){
+  const imgs = [...document.querySelectorAll('img[data-capa]')];
+  for(const el of imgs){
+    if(el.src && el.src !== PIXEL_VAZIO_MINI) continue;
+    const im = await imgPorFoto(el.dataset.capa);
+    if(im) el.src = im.mini || im.carimbada || PIXEL_VAZIO_MINI;
+  }
+}
+const _renderMeusBase = renderMeus;
+renderMeus = async function(){ await _renderMeusBase(); try{ await pintarCapasMeus(); }catch(e){} };
+
+/* manutenção em segundo plano: miniaturas faltantes e limpeza das cópias grandes
+   de fotos já enviadas há mais de 15 dias (uma de cada vez, sem travar) */
+let MANUTENCAO_RODANDO = false;
+async function manutencaoImagens(){
+  if(MANUTENCAO_RODANDO || !db) return; MANUTENCAO_RODANDO = true;
+  try{
+    const fotos = await dbGetAll('fotos');
+    const porUid = new Map(fotos.map(f=>[f.uid, f]));
+    const limite = Date.now() - 15*24*3600*1000;
+    const ids = await new Promise(res=>{ const q=db.transaction('imagens','readonly').objectStore('imagens').getAllKeys(); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>res([]); });
+    let feitos = 0, vistos = 0;
+    for(const id of ids){
+      if(feitos >= 40 || vistos >= 400) break; vistos++;
+      const im = await new Promise(res=>{ const q=db.transaction('imagens','readonly').objectStore('imagens').get(id); q.onsuccess=()=>res(q.result||null); q.onerror=()=>res(null); });
+      if(!im) continue;
+      const fo = porUid.get(im.fotoUid);
+      let mudou = false, novo = {...im};
+      if(!novo.mini && (novo.carimbada || novo.original)){
+        try{ novo.mini = await encolher(novo.carimbada || novo.original, MINI_TELA, 0.6); mudou = true; }catch(e){}
+      }
+      if(fo && fo.enviada && fo.url && novo.carimbada && novo.mini){
+        const quando = Date.parse(fo.enviadaEm || fo.dataHora || '') || 0;
+        if(quando && quando < limite){ novo.carimbada = null; novo.original = null; mudou = true; }
+      }
+      if(mudou){ await _rawPut('imagens', novo); feitos++; await new Promise(r=>setTimeout(r, 60)); }
+    }
+  }catch(e){ console.warn('manutenção de imagens', e); }
+  finally{ MANUTENCAO_RODANDO = false; }
+}
+setTimeout(manutencaoImagens, 20000);
+setInterval(()=>{ if(!document.hidden) manutencaoImagens(); }, 60*60*1000);
 
 </script>
 </body>
