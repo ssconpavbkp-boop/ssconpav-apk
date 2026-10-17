@@ -576,7 +576,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261017-014';
+const APP_VERSION = '20261017-015';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -611,7 +611,17 @@ function initDB(){
       try{ const st=e.target.transaction.objectStore('fotos'); if(!st.indexNames.contains('furoUid')) st.createIndex('furoUid','furoUid',{unique:false}); }catch(err){ console.warn(err); }
     };
     req.onsuccess=e=>{db=e.target.result;res(db)};
-    req.onerror=e=>rej(e.target.error);
+    req.onerror=e=>{
+      const err = e.target.error;
+      if(err && err.name==='VersionError'){
+        console.warn('banco mais novo que a tela; abrindo sem mexer na versão');
+        const r2 = indexedDB.open(DB_NAME);
+        r2.onsuccess = ev=>{ db=ev.target.result; res(db); };
+        r2.onerror = ev=>rej(ev.target.error);
+        return;
+      }
+      rej(err);
+    };
   });
 }
 function dbGetAll(s){return new Promise((res,rej)=>{try{const r=db.transaction(s,'readonly').objectStore(s).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)}catch(e){rej(e)}})}
@@ -1936,7 +1946,7 @@ async function seqRender(){
         if(!fo.enderecoOk) semEnd++;
         if(fo.lat == null) semGps++;
         const im = mapaI.get(fo.uid);
-        const src = im ? (im.mini || im.carimbada) : (fo.urlMini || fo.url || '');
+        const src = im ? (im.mini || im.carimbada) : (navigator.onLine ? (fo.urlMini || fo.url || '') : '');
         const gpsCls = fo.lat!=null ? '' : ' no';
         const gpsTxt = fo.lat!=null ? (fo.enderecoOk?'GPS+END':'GPS') : 'SEM GPS';
         return `<div class="slotp cheio" data-slot="${f.uid}|${tipo}" onclick="seqTirar('${f.uid}','${tipo}')">
@@ -2716,7 +2726,7 @@ async function renderMeus(){
         ${r.corrigido?`<div class="al aw show" style="margin:10px 12px 0"><i class="ti ti-pencil"></i>
           <span>Correção enviada por <b>${esc(r.corrigidoPor||'')}</b> em
           ${r.corrigidoEm?new Date(r.corrigidoEm).toLocaleString('pt-BR'):''}${r.conferido?' — já conferida pelo escritório':' — aguardando conferência'}</span></div>`:''}
-        <div class="th">${[0,1].map(i=>l.capas[i]?`<img data-capa="${l.capas[i].uid}" src="${l.capas[i].url||PIXEL_VAZIO_MINI}">`:`<div class="vz">sem foto</div>`).join('')}</div>
+        <div class="th">${[0,1].map(i=>l.capas[i]?`<img data-capa="${l.capas[i].uid}" data-url="${l.capas[i].url||''}" src="${PIXEL_VAZIO_MINI}">`:`<div class="vz">sem foto</div>`).join('')}</div>
         <div class="ib">
           <div class="ln"><span>Equipe</span><b>${esc(r.equipe||'—')}</b></div>
           <div class="ln"><span>Buracos / fotos</span><b>${l.fs.length}</b> buraco(s) · <b>${l.nFotos}</b> foto(s)</div>
@@ -2843,7 +2853,9 @@ async function baixarRelatorio(uid){
     }
     window.addEventListener('online', ()=>{ pintarChip(); sincronizar(true); });
     window.addEventListener('offline', pintarChip);
+    window.__INIT_OK = true;
   }catch(err){
+    window.__INIT_FALHOU = true;
     document.querySelector('.wrap').insertAdjacentHTML('afterbegin',
       `<div class="al ae show"><i class="ti ti-alert-circle"></i><span>Não foi possível iniciar o aplicativo
        (${esc(err.message||err)}). Feche e abra novamente.</span></div>`);
@@ -3174,7 +3186,13 @@ window.addEventListener('online', ()=>verificarTelaAuto(false));
 /* A casca conta quantas vezes abriu a tela baixada sem ela avisar que carregou;
    este aviso zera o contador. Se a tela estivesse estragada, este código nem
    rodaria — e na 3ª tentativa a casca volta sozinha para a tela de fábrica. */
-try{ if(noAplicativo() && typeof AndroidTeste.telaOk === 'function') AndroidTeste.telaOk(); }catch(e){}
+/* avisa a casca que a tela carregou — só depois que o início deu certo (uma tela
+   que trava no início não pode se passar por boa; a casca a descarta na 3ª vez) */
+(function avisarCascaQueCarregou(t0){
+  if(window.__INIT_FALHOU) return;
+  if(window.__INIT_OK){ try{ if(noAplicativo() && typeof AndroidTeste.telaOk === 'function') AndroidTeste.telaOk(); }catch(e){} return; }
+  if(Date.now()-t0 < 60000) setTimeout(()=>avisarCascaQueCarregou(t0), 300);
+})(Date.now());
 
 /* ======================= BAIXADA DA NUVEM SEM PERDER LINHA ===================
    A baixada antiga paginava só pela data (atualizado_em > última). Quando mais
@@ -3299,9 +3317,10 @@ async function baixarDataUrl(url){
 async function pintarCapasMeus(){
   const imgs = [...document.querySelectorAll('img[data-capa]')];
   for(const el of imgs){
-    if(el.src && el.src !== PIXEL_VAZIO_MINI) continue;
+    if(el.dataset.pronta) continue; el.dataset.pronta = '1';
     const im = await imgPorFoto(el.dataset.capa);
-    if(im) el.src = im.mini || im.carimbada || PIXEL_VAZIO_MINI;
+    if(im && (im.mini || im.carimbada)) el.src = im.mini || im.carimbada;
+    else if(el.dataset.url && navigator.onLine) el.src = el.dataset.url;   /* remota só com internet */
   }
 }
 const _renderMeusBase = renderMeus;
