@@ -1,8 +1,8 @@
 {
-  "appVersion": "20261013-013",
+  "appVersion": "20261017-014",
   "apkVersionCode": 262861942,
   "apkVersionName": "20261008-011",
   "apkUrl": "https://ssconpavbkp-boop.github.io/ssconpav-apk/SSCONPAV-Campo.apk",
-  "publicadoEm": "2026-10-13T20:06:46Z",
-  "notas": "Foto: toda vez pergunta se quer tirar a foto agora (câmera) ou escolher da galeria, para todos os perfis."
+  "publicadoEm": "2026-10-17T16:02:51Z",
+  "notas": "APK 20261017-014: fotos sem travar (indice, miniaturas, limpeza)"
 }
