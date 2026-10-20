@@ -576,7 +576,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261020-017';
+const APP_VERSION = '20261020-018';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -3440,6 +3440,109 @@ async function manutencaoImagens(){
   }catch(e){ console.warn('manutenção de imagens', e); }
   finally{ MANUTENCAO_RODANDO = false; }
 }
+/* ======================= ATUALIZAÇÃO FORÇADA, SEM PERDER DADO ===============
+   Versão nova da tela ou do aplicativo entra sozinha, a qualquer hora: antes de
+   trocar, o app grava o que estiver sendo digitado, espera as gravações
+   terminarem e tenta sincronizar. Tudo mora no banco do aparelho, que a troca
+   da tela e a instalação do APK (mesma assinatura) não apagam. Só espera
+   enquanto alguém está digitando ou com uma janela aberta, no máximo 2 min. */
+function atuEmUso(){
+  const a = document.activeElement;
+  if(TELA!=='login' && a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type!=='file') return true;
+  return [...document.querySelectorAll('.ov')].some(o=>o.style.display==='flex' || o.classList.contains('show'));
+}
+async function atuGuardarTudo(){
+  try{ const a=document.activeElement; if(a && a.blur) a.blur(); }catch(e){}
+  try{
+    document.querySelectorAll('[data-med]').forEach(el=>{
+      const p=(el.getAttribute('data-med')||'').split('|'); if(p.length===2) medGravar(p[0],p[1],el.value); });
+  }catch(e){}
+  await new Promise(r=>setTimeout(r,500));
+  try{ await _SEQ_CADEIA; }catch(e){}
+  if(navigator.onLine && conectado()){
+    try{ await Promise.race([sincronizar(true), new Promise(r=>setTimeout(r,20000))]); }catch(e){}
+  }
+  try{ await _SEQ_CADEIA; }catch(e){}
+}
+function atuTela(tit, msg, botao, acao){
+  let b = $('atu-forca');
+  if(!b){
+    b = document.createElement('div'); b.id='atu-forca';
+    b.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(20,24,32,.94);color:#fff;display:flex;'
+      +'flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;gap:14px;font-family:inherit';
+    document.body.appendChild(b);
+  }
+  b.innerHTML = `<i class="ti ti-refresh" style="font-size:44px;color:#F5A524"></i>
+    <div style="font-size:20px;font-weight:700">${tit}</div>
+    <div style="font-size:14.5px;line-height:1.5;max-width:340px;opacity:.92">${msg}</div>
+    ${botao?`<button id="atu-forca-bt" class="btn p" style="min-width:210px;margin-top:6px">${botao}</button>`:''}`;
+  if(botao && acao) $('atu-forca-bt').onclick = acao;
+}
+let _ATU_FORCA_DESDE = 0;
+/* tela nova: substitui o "só quando estiver no início" */
+aplicarSeParado = function(){
+  if(!ATU_PENDENTE || ATU_APLICANDO) return;
+  if(!noAplicativo() && tentouHaPouco(ATU_PENDENTE)) return;
+  if(!_ATU_FORCA_DESDE) _ATU_FORCA_DESDE = Date.now();
+  if((document.hidden || atuEmUso()) && Date.now()-_ATU_FORCA_DESDE < 120000){
+    mostrarAvisoAtu(); setTimeout(aplicarSeParado, 8000); return;
+  }
+  ATU_APLICANDO = true; marcarTentativa(ATU_PENDENTE);
+  const v = esc(ATU_PENDENTE);
+  const ir = async ()=>{
+    atuTela('Atualizando…','Guardando o que está em andamento antes de trocar para a versão <b>'+v+'</b>.');
+    await atuGuardarTudo();
+    atuTela('Atualizando…','Tudo guardado. Reabrindo na versão <b>'+v+'</b>.');
+    setTimeout(async ()=>{
+      if(noAplicativo()){ AndroidTeste.aplicarAtualizacao(); return; }
+      try{ await fetch(location.pathname, {cache:'reload'}); }catch(e){}
+      location.reload();
+    }, 700);
+  };
+  let n = 5;
+  const tic = ()=>{
+    if(n<=0){ ir(); return; }
+    atuTela('Atualização obrigatória','Chegou a versão <b>'+v+'</b>. O app reinicia em <b>'+n+'</b> s. Seus relatórios, fotos e medidas em andamento ficam guardados.','Atualizar agora', ()=>{ n=0; });
+    n--; setTimeout(tic, 1000);
+  };
+  tic();
+};
+/* aplicativo (APK) novo: instalação obrigatória */
+let _APK_FORCADO = false;
+function atuForcarApk(v){
+  if(_APK_FORCADO) return; _APK_FORCADO = true;
+  const nome = esc(v||'');
+  const instalar = async ()=>{
+    atuTela('Preparando a instalação…','Guardando o que está em andamento.');
+    await atuGuardarTudo();
+    atuTela('Instalar a versão '+nome,'Na tela do Android que abrir, toque em <b>Instalar</b> (ou <b>Atualizar</b>). Seus dados continuam no aparelho. Se pedir, libere "Instalar apps desta fonte".','Instalar de novo', instalar);
+    try{ instalarApp(); }catch(e){}
+  };
+  const espera = ()=>{
+    if((document.hidden || atuEmUso()) && Date.now()-_ATU_FORCA_DESDE < 120000){ setTimeout(espera, 8000); return; }
+    let n = 6;
+    const tic = ()=>{
+      if(n<=0){ instalar(); return; }
+      atuTela('Atualização obrigatória do aplicativo','A versão <b>'+nome+'</b> será instalada em <b>'+n+'</b> s. Seus relatórios, fotos e medidas em andamento ficam guardados.','Instalar agora', ()=>{ n=0; });
+      n--; setTimeout(tic, 1000);
+    };
+    tic();
+  };
+  _ATU_FORCA_DESDE = Date.now();
+  espera();
+}
+const _avisarAppBase2 = avisarApp;
+avisarApp = function(estado, valor){
+  _avisarAppBase2(estado, valor);
+  if(estado==='pronta') atuForcarApk(valor);
+};
+/* procura também o aplicativo novo toda vez que procura a tela */
+const _verificarTelaAuto2 = verificarTelaAuto;
+verificarTelaAuto = async function(forcar){
+  try{ if(noAplicativo() && navigator.onLine && !_APK_FORCADO) AndroidTeste.procurarAtualizacaoDoApp(); }catch(e){}
+  return _verificarTelaAuto2(forcar);
+};
+
 /* Se o Android fechar o app enquanto a câmera está aberta, a foto se perde antes
    de chegar aqui. O app marca o momento em que abriu a câmera; se ele reabrir
    com a marca ainda lá, avisa para tirar de novo, em vez de sumir calado. */
