@@ -48,6 +48,7 @@
 
     <!-- Permissions -->
 
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Localização: sem estas duas linhas o Android nega o GPS para a tela
          antes mesmo de perguntar ao usuário (a casca pede em tempo de execução) -->
