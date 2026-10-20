@@ -193,6 +193,38 @@ public class AndroidTeste {
         });
     }
 
+    /* Grava a foto (JPEG já com EXIF/GPS) na galeria: Pictures/<pasta>. */
+    @JavascriptInterface
+    public boolean salvarNaGaleria(String base64, String nome, String pasta) {
+        try {
+            byte[] bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+            String dir = (pasta == null || pasta.isEmpty()) ? "SSCONPAV" : pasta;
+            if (Build.VERSION.SDK_INT >= 29) {
+                android.content.ContentResolver cr = activity.getContentResolver();
+                android.content.ContentValues v = new android.content.ContentValues();
+                v.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, nome);
+                v.put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                v.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/" + dir);
+                v.put(android.provider.MediaStore.Images.Media.IS_PENDING, 1);
+                Uri uri = cr.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
+                if (uri == null) return false;
+                try (java.io.OutputStream out = cr.openOutputStream(uri)) { out.write(bytes); }
+                v.clear();
+                v.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0);
+                cr.update(uri, v, null, null);
+                return true;
+            } else {
+                File pics = new File(android.os.Environment.getExternalStoragePublicDirectory(
+                        android.os.Environment.DIRECTORY_PICTURES), dir);
+                if (!pics.exists() && !pics.mkdirs()) return false;
+                File f = new File(pics, nome);
+                try (FileOutputStream out = new FileOutputStream(f)) { out.write(bytes); }
+                android.media.MediaScannerConnection.scanFile(activity, new String[]{f.getAbsolutePath()}, new String[]{"image/jpeg"}, null);
+                return true;
+            }
+        } catch (Throwable e) { Log.w(TAG, "salvarNaGaleria", e); return false; }
+    }
+
     /* ================================ helpers ============================ */
 
     private String baixarTexto(String urlStr) throws Exception {
