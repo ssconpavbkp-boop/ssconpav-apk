@@ -576,7 +576,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261020-016';
+const APP_VERSION = '20261020-017';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -3309,7 +3309,11 @@ baixar = async function(){
       if(ln.deletado){ if(local) await _rawDel(ln.store, local.id); total++; continue; }
       /* alteração local mais recente que a da nuvem não é sobrescrita */
       if(ln.store!=='usuarios' && local && (local._ts||0) > new Date(ln.atualizado_em).getTime()+1500) continue;
+      /* alteração deste aparelho ainda na fila de envio: é a mais nova, a nuvem não sobrescreve */
+      if(local && lerFila().some(i=>i.store===ln.store && i.uid===ln.uid && !i.del)) continue;
       const rec = {...(ln.dados||{}), uid:ln.uid};
+      /* foto: nunca perde o endereço da imagem já enviada */
+      if(ln.store==='fotos' && local && local.url && !rec.url){ rec.url=local.url; rec.urlMini=local.urlMini||rec.urlMini; rec.enviada=true; }
       if(local){ rec.id = local.id; await _rawPut(ln.store, rec); }
       else { delete rec.id; await _rawAdd(ln.store, rec); }
       total++;
@@ -3429,13 +3433,38 @@ async function manutencaoImagens(){
       }
       if(fo && fo.enviada && fo.url && novo.carimbada && novo.mini){
         const quando = Date.parse(fo.enviadaEm || fo.dataHora || '') || 0;
-        if(quando && quando < limite){ novo.carimbada = null; novo.original = null; mudou = true; }
+        /* as fotos ficam fixas no aparelho: só saem por exclusão manual */
       }
       if(mudou){ await _rawPut('imagens', novo); feitos++; await new Promise(r=>setTimeout(r, 60)); }
     }
   }catch(e){ console.warn('manutenção de imagens', e); }
   finally{ MANUTENCAO_RODANDO = false; }
 }
+/* Se o Android fechar o app enquanto a câmera está aberta, a foto se perde antes
+   de chegar aqui. O app marca o momento em que abriu a câmera; se ele reabrir
+   com a marca ainda lá, avisa para tirar de novo, em vez de sumir calado. */
+(function(){
+  const K='sscapp_camera';
+  const _t = seqTirar;
+  seqTirar = async function(furoUid, tipo){
+    const r = await _t(furoUid, tipo);
+    try{ localStorage.setItem(K, JSON.stringify({furoUid, tipo, ts:Date.now()})); }catch(e){}
+    setTimeout(()=>{ if(!document.hidden){ try{ localStorage.removeItem(K); }catch(e){} } }, 90000);
+    return r;
+  };
+  const _r = seqRecebeuFoto;
+  seqRecebeuFoto = async function(input){ try{ localStorage.removeItem(K); }catch(e){} return _r(input); };
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden) return;
+    setTimeout(()=>{ try{ localStorage.removeItem(K); }catch(e){} }, 6000);   /* app vivo: nada se perdeu */
+  });
+  let m=null; try{ m=JSON.parse(localStorage.getItem(K)||'null'); }catch(e){}
+  if(m && Date.now()-m.ts < 6*3600*1000){
+    try{ localStorage.removeItem(K); }catch(e){}
+    const avisar = ()=>{ if(TELA==='seq') alerta('s-aviso','O aparelho fechou o app enquanto a câmera estava aberta e <b>a última foto não foi guardada</b>. Toque no quadro e tire de novo. As fotos já guardadas continuam aqui.',0); };
+    [3000,8000,15000].forEach(ms=>setTimeout(avisar, ms));
+  }
+})();
 setTimeout(manutencaoImagens, 20000);
 setInterval(()=>{ if(!document.hidden) manutencaoImagens(); }, 60*60*1000);
 
