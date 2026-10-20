@@ -576,7 +576,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261017-015';
+const APP_VERSION = '20261020-016';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -872,6 +872,8 @@ async function baixar(){
       const local=all.find(x=>x.uid===ln.uid);
       if(ln.deletado){ if(local) await _rawDel(ln.store,local.id); total++; continue; }
       if(local && (local._ts||0) > new Date(ln.atualizado_em).getTime()+1500) continue;
+      /* registro com alteração ainda na fila de envio: a versão deste aparelho é a mais nova */
+      if(local && lerFila().some(i=>i.store===ln.store && i.uid===ln.uid && !i.del)) continue;
       const rec={...(ln.dados||{}),uid:ln.uid};
       /* Cada aparelho tem seus próprios ids locais — o vínculo real é o uid da medição. */
       if(local){ rec.id=local.id; await _rawPut(ln.store,rec); }
@@ -1361,6 +1363,56 @@ async function miniMapa(lat,lng){
 }
 
 /* Desenha o carimbo por cima da foto: bússola, mapa e o bloco de dados. */
+/* ---------- Foto na galeria do celular, já com as coordenadas (EXIF) ---------- */
+function exifGpsBytes(lat, lng, alt){
+  const dms = v=>{ v=Math.abs(v); const g=Math.floor(v), mf=(v-g)*60, m=Math.floor(mf), sc=Math.round((mf-m)*60*10000); return [g,1,m,1,sc,10000]; };
+  const ent = [];
+  const la=dms(lat), lo=dms(lng);
+  const N=6, base=26, ifdLen=2+N*12+4, dataOff=base+ifdLen;
+  const buf=new ArrayBuffer(dataOff+24+24+8), dv=new DataView(buf), u8=new Uint8Array(buf);
+  u8[0]=0x4D; u8[1]=0x4D; dv.setUint16(2,42); dv.setUint32(4,8);
+  dv.setUint16(8,1); dv.setUint16(10,0x8825); dv.setUint16(12,4); dv.setUint32(14,1); dv.setUint32(18,base); dv.setUint32(22,0);
+  dv.setUint16(base,N);
+  let p=base+2;
+  const put=(tag,type,cnt,val,isOff)=>{ dv.setUint16(p,tag); dv.setUint16(p+2,type); dv.setUint32(p+4,cnt);
+    if(isOff) dv.setUint32(p+8,val); else { if(type===2){ u8[p+8]=val.charCodeAt(0); u8[p+9]=0; } else u8[p+8]=val; } p+=12; };
+  put(1,2,2,lat>=0?'N':'S',false);
+  put(2,5,3,dataOff,true);
+  put(3,2,2,lng>=0?'E':'W',false);
+  put(4,5,3,dataOff+24,true);
+  put(5,1,1,(alt!=null&&alt<0)?1:0,false);
+  put(6,5,1,dataOff+48,true);
+  dv.setUint32(p,0);
+  la.forEach((v,i)=>dv.setUint32(dataOff+i*4,v));
+  lo.forEach((v,i)=>dv.setUint32(dataOff+24+i*4,v));
+  dv.setUint32(dataOff+48,Math.round(Math.abs(alt||0)*100)); dv.setUint32(dataOff+52,100);
+  return u8;
+}
+function jpegComGps(dataUrl, lat, lng, alt){
+  const bin=atob(dataUrl.split(',')[1]), n=bin.length, src=new Uint8Array(n);
+  for(let i=0;i<n;i++) src[i]=bin.charCodeAt(i);
+  if(src[0]!==0xFF||src[1]!==0xD8) return src;
+  const tiff=exifGpsBytes(lat,lng,alt);
+  const head=[0x45,0x78,0x69,0x66,0,0];
+  const len=2+head.length+tiff.length;
+  const out=new Uint8Array(2+2+len+(n-2));
+  out[0]=0xFF; out[1]=0xD8; out[2]=0xFF; out[3]=0xE1; out[4]=len>>8; out[5]=len&255;
+  out.set(head,6); out.set(tiff,6+head.length);
+  out.set(src.subarray(2),4+len);
+  return out;
+}
+function bytesParaB64(u8){ let s=''; const k=0x8000; for(let i=0;i<u8.length;i+=k) s+=String.fromCharCode.apply(null,u8.subarray(i,i+k)); return btoa(s); }
+/* Só funciona no aplicativo instalado (APK novo); no navegador não há como gravar na galeria. */
+function galeriaSalvar(dataUrl, fo){
+  try{
+    if(typeof AndroidTeste==='undefined' || typeof AndroidTeste.salvarNaGaleria!=='function') return false;
+    const b = (fo && fo.lat!=null) ? jpegComGps(dataUrl, fo.lat, fo.lng, fo.alt) : null;
+    const b64 = b ? bytesParaB64(b) : dataUrl.split(',')[1];
+    const nome = `SSCONPAV_buraco${fo.furoNum||''}_${fo.tipo||'foto'}_${String(fo.dataHora||Date.now()).replace(/\D/g,'').slice(0,14)}.jpg`;
+    return !!AndroidTeste.salvarNaGaleria(b64, nome, 'SSCONPAV');
+  }catch(e){ console.warn('galeria', e); return false; }
+}
+
 async function carimbar(dataUrl, m){
   const img = await carregarImg(dataUrl);
   const W = img.width, H = img.height;
@@ -1663,10 +1715,18 @@ async function seqAddFuro(){
   const el = document.querySelector('#s-lista .fcard-furo:first-child');
   if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
 }
-async function seqSetCampo(uid, campo, valor){
-  const todos = await dbGetAll('furos');
-  const f = todos.find(x=>x.uid===uid); if(!f) return;
-  await dbPut('furos', {...f, [campo]: valor});
+/* Gravações em fila: duas medidas digitadas em seguida liam o mesmo registro
+   antigo e a segunda apagava a primeira. Agora cada gravação espera a anterior. */
+let _SEQ_CADEIA = Promise.resolve();
+function seqSetCampo(uid, campo, valor){
+  const p = _SEQ_CADEIA.then(async()=>{
+    const todos = await dbGetAll('furos');
+    const f = todos.find(x=>x.uid===uid); if(!f) return;
+    if(String(f[campo]==null?'':f[campo]) === String(valor==null?'':valor)) return;
+    await dbPut('furos', {...f, [campo]: valor});
+  });
+  _SEQ_CADEIA = p.catch(()=>{});
+  return p;
 }
 function seqExcluirFuro(uid, num){
   confirmarSheet('Excluir buraco '+num,
@@ -1810,6 +1870,7 @@ async function seqRecebeuFoto(input){
     if(antiga) await _rawPut('imagens', {...antiga, ...linha});
     else await _rawAdd('imagens', linha);
 
+    galeriaSalvar(carimbada, registro);
     await seqRender();
     /* Foto guardada: se o buraco ainda não tem medida, o app pede agora. */
     const depois = (await dbGetAll('furos')).find(x=>x.uid===furoUid);
@@ -1917,7 +1978,27 @@ function medResumoTela(furos){
     <div class="kl">Área medida</div><div class="kv">${medBR(area,2)} m²</div></div>`;
 }
 
+/* Enquanto alguém digita num campo do cartão, a lista não é redesenhada
+   (era isso que fazia a medida "sumir" quando a sincronização terminava). */
+let _SEQ_ADIADO = false;
+function seqDigitando(){
+  const a = document.activeElement;
+  return !!(a && a.closest && a.closest('#s-lista') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+}
+document.addEventListener('focusout', ()=>{
+  if(!_SEQ_ADIADO) return;
+  setTimeout(()=>{ if(_SEQ_ADIADO && !seqDigitando()){ _SEQ_ADIADO=false; seqRender(); } }, 400);
+});
+const _medTimers = {};
+document.addEventListener('input', e=>{
+  const t = e.target; if(!t || !t.getAttribute) return;
+  const d = t.getAttribute('data-med'); if(!d) return;
+  const [uid,campo] = d.split('|');
+  clearTimeout(_medTimers[d]);
+  _medTimers[d] = setTimeout(()=>{ medGravar(uid, campo, t.value); }, 500);
+});
 async function seqRender(){
+  if(seqDigitando()){ _SEQ_ADIADO = true; return; }
   try{
     /* A lista depende só da data: sem medição o dia continua sendo lançado. */
     if(!$('s-data').value){ $('s-lista').innerHTML = ''; $('s-kpis').innerHTML = '';
