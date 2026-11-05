@@ -576,7 +576,7 @@ body.home .top b{color:#fff}
    Companheiro do sistema de Relatório Fotográfico. Funciona offline e
    sincroniza pela mesma tabela na nuvem usada pelo computador.
    ====================================================================== */
-const APP_VERSION = '20261020-018';
+const APP_VERSION = '20261105-019';
 
 /* ======================================================================
    CONFIGURAÇÃO DA NUVEM — preencha UMA VEZ, antes de publicar o app.
@@ -3571,6 +3571,43 @@ verificarTelaAuto = async function(forcar){
 setTimeout(manutencaoImagens, 20000);
 setInterval(()=>{ if(!document.hidden) manutencaoImagens(); }, 60*60*1000);
 
+</script>
+<script id="bloqueio-remoto">
+/* BLOQUEIO REMOTO: lê bloqueio.json do canal de publicação. Com "bloqueado": true
+   o app/sistema mostra só esta tela e não deixa entrar. Os dados ficam guardados
+   no aparelho. Sem internet vale o último estado conhecido. */
+(function(){
+  var URL_ = 'https://ssconpavbkp-boop.github.io/ssconpav-apk/bloqueio.json', K = 'ssc_bloqueio_tb_app', ESTADO = null;
+  try{ ESTADO = JSON.parse(localStorage.getItem(K)||'null'); }catch(e){}
+  function tela(){
+    var b = document.getElementById('bloqueio-tela');
+    if(!ESTADO || !ESTADO.bloqueado){ if(b) b.remove(); return; }
+    if(b) return;
+    if(!document.body) return;
+    b = document.createElement('div'); b.id = 'bloqueio-tela';
+    b.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:2147483647;background:#14181f;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;font-family:system-ui,Arial,sans-serif;gap:14px';
+    var m = String(ESTADO.mensagem || 'Sistema temporariamente bloqueado. Procure o escritório.').replace(/[<>&]/g, function(c){ return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c]; });
+    b.innerHTML = '<div style="font-size:54px">🔒</div><div style="font-size:22px;font-weight:700">Sistema bloqueado</div><div style="font-size:15px;line-height:1.5;max-width:360px;opacity:.9">' + m + '</div><div style="font-size:12px;opacity:.55;margin-top:10px">Seus dados continuam guardados neste aparelho.</div>';
+    document.body.appendChild(b);
+  }
+  function conferir(){
+    if(!navigator.onLine) return;
+    fetch(URL_ + '?t=' + Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+      if(!j) return;
+      ESTADO = {bloqueado: j.bloqueado === true, mensagem: j.mensagem || ''};
+      try{ localStorage.setItem(K, JSON.stringify(ESTADO)); }catch(e){}
+      tela();
+    }).catch(function(){});
+  }
+  function iniciar(){
+    tela(); conferir();
+    setInterval(conferir, 60000);
+    setInterval(tela, 1500);
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) conferir(); });
+    window.addEventListener('online', conferir);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+})();
 </script>
 </body>
 </html>
